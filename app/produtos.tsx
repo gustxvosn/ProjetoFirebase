@@ -4,6 +4,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDocs,
   onSnapshot,
   query,
   serverTimestamp,
@@ -49,6 +50,30 @@ export default function Produtos() {
     [produtoEditandoId]
   );
 
+  async function carregarProdutos(userId = usuario?.uid) {
+    if (!userId) return;
+
+    const produtosSnap = await getDocs(
+      query(collection(db, "produtos"), where("usuarioId", "==", userId))
+    );
+
+    const lista = produtosSnap.docs
+      .map((item) => {
+        const dados = item.data();
+
+        return {
+          id: item.id,
+          nome: String(dados.nome || ""),
+          categoria: String(dados.categoria || ""),
+          preco: Number(dados.preco || 0),
+          quantidade: Number(dados.quantidade || 0),
+        };
+      })
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+
+    setProdutos(lista);
+  }
+
   useEffect(() => {
     let unsubscribeProdutos: (() => void) | undefined;
 
@@ -59,6 +84,7 @@ export default function Produtos() {
       }
 
       setUsuario(user);
+      setCarregando(true);
 
       const produtosRef = collection(db, "produtos");
       const produtosQuery = query(produtosRef, where("usuarioId", "==", user.uid));
@@ -135,15 +161,43 @@ export default function Produtos() {
 
       if (produtoEditandoId) {
         await updateDoc(doc(db, "produtos", produtoEditandoId), dadosProduto);
+        setProdutos((listaAtual) =>
+          listaAtual
+            .map((produto) =>
+              produto.id === produtoEditandoId
+                ? {
+                    id: produto.id,
+                    nome: dadosProduto.nome,
+                    categoria: dadosProduto.categoria,
+                    preco: dadosProduto.preco,
+                    quantidade: dadosProduto.quantidade,
+                  }
+                : produto
+            )
+            .sort((a, b) => a.nome.localeCompare(b.nome))
+        );
         Alert.alert("Sucesso", "Produto atualizado com sucesso.");
       } else {
-        await addDoc(collection(db, "produtos"), {
+        const produtoRef = await addDoc(collection(db, "produtos"), {
           ...dadosProduto,
           criadoEm: serverTimestamp(),
         });
+        setProdutos((listaAtual) =>
+          [
+            ...listaAtual,
+            {
+              id: produtoRef.id,
+              nome: dadosProduto.nome,
+              categoria: dadosProduto.categoria,
+              preco: dadosProduto.preco,
+              quantidade: dadosProduto.quantidade,
+            },
+          ].sort((a, b) => a.nome.localeCompare(b.nome))
+        );
         Alert.alert("Sucesso", "Produto cadastrado com sucesso.");
       }
 
+      await carregarProdutos(usuario.uid);
       limparFormulario();
     } catch (error: any) {
       Alert.alert("Erro ao salvar", error.message);

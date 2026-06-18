@@ -1,4 +1,4 @@
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import { createUserWithEmailAndPassword, signOut, updateProfile } from "firebase/auth";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -11,10 +11,29 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  Pressable,
   TouchableOpacity,
   View,
 } from "react-native";
 import { auth, db } from "../services/firebase";
+
+function mensagemErroFirebase(error: any) {
+  switch (error?.code) {
+    case "auth/email-already-in-use":
+      return "Este e-mail já está cadastrado.";
+    case "auth/invalid-email":
+      return "Informe um e-mail válido.";
+    case "auth/operation-not-allowed":
+      return "Ative o provedor E-mail/senha no Firebase Authentication.";
+    case "auth/weak-password":
+      return "A senha precisa ter pelo menos 6 caracteres.";
+    case "permission-denied":
+    case "firestore/permission-denied":
+      return "A conta foi criada, mas o Firestore bloqueou o salvamento do perfil. Verifique as regras do banco.";
+    default:
+      return error?.message || "Não foi possível concluir o cadastro.";
+  }
+}
 
 export default function Cadastro() {
   const [nome, setNome] = useState("");
@@ -22,38 +41,54 @@ export default function Cadastro() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [carregando, setCarregando] = useState(false);
+  const [diagnostico, setDiagnostico] = useState("");
 
   async function cadastrar() {
+    setDiagnostico("Botao CADASTRAR acionado.");
     if (!nome.trim() || !email.trim() || !senha.trim()) {
+      setDiagnostico("Preencha nome, e-mail e senha para continuar.");
       Alert.alert("Atenção", "Preencha nome, e-mail e senha.");
       return;
     }
 
     if (senha.length < 6) {
+      setDiagnostico("A senha precisa ter pelo menos 6 caracteres.");
       Alert.alert("Atenção", "A senha precisa ter pelo menos 6 caracteres.");
       return;
     }
 
     try {
       setCarregando(true);
+      setDiagnostico("Criando usuario no Firebase Authentication...");
       const credencial = await createUserWithEmailAndPassword(auth, email.trim(), senha);
+      setDiagnostico(`Usuario criado no Auth. UID: ${credencial.user.uid}`);
 
       await updateProfile(credencial.user, {
         displayName: nome.trim(),
       });
 
-      await setDoc(doc(db, "usuarios", credencial.user.uid), {
-        nome: nome.trim(),
-        telefone: telefone.trim(),
-        email: email.trim(),
-        criadoEm: serverTimestamp(),
-        atualizadoEm: serverTimestamp(),
-      });
+      try {
+        setDiagnostico("Salvando perfil no Cloud Firestore...");
+        await setDoc(doc(db, "usuarios", credencial.user.uid), {
+          nome: nome.trim(),
+          telefone: telefone.trim(),
+          email: email.trim(),
+          criadoEm: serverTimestamp(),
+          atualizadoEm: serverTimestamp(),
+        });
+      } catch (firestoreError: any) {
+        setDiagnostico(`Auth criado, mas Firestore falhou: ${firestoreError?.code || firestoreError?.message}`);
+        Alert.alert("Cadastro parcial", mensagemErroFirebase(firestoreError));
+        return;
+      }
 
       Alert.alert("Sucesso", "Usuário cadastrado com sucesso!");
-      router.replace("/home");
+      setDiagnostico("Cadastro salvo no Authentication e no Firestore.");
+      await signOut(auth);
+      router.replace("/login");
     } catch (error: any) {
-      Alert.alert("Erro ao cadastrar", error.message);
+      setDiagnostico(`Falha no cadastro: ${error?.code || error?.message}`);
+      Alert.alert("Erro ao cadastrar", mensagemErroFirebase(error));
     } finally {
       setCarregando(false);
     }
@@ -105,7 +140,7 @@ export default function Cadastro() {
             value={senha}
           />
 
-          <TouchableOpacity
+          <Pressable
             disabled={carregando}
             onPress={cadastrar}
             style={[styles.botao, carregando && styles.botaoDesabilitado]}
@@ -115,11 +150,13 @@ export default function Cadastro() {
             ) : (
               <Text style={styles.textoBotao}>CADASTRAR</Text>
             )}
-          </TouchableOpacity>
+          </Pressable>
 
           <TouchableOpacity onPress={() => router.replace("/login")} style={styles.linkArea}>
             <Text style={styles.link}>Já tenho uma conta</Text>
           </TouchableOpacity>
+
+          {diagnostico ? <Text style={styles.diagnostico}>{diagnostico}</Text> : null}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -192,5 +229,12 @@ const styles = StyleSheet.create({
     color: "#2563EB",
     fontSize: 15,
     fontWeight: "600",
+  },
+  diagnostico: {
+    color: "#475569",
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 16,
+    textAlign: "center",
   },
 });

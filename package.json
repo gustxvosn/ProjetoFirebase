@@ -3,12 +3,15 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --port 8082",
     "reset-project": "node ./scripts/reset-project.js",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
-    "lint": "expo lint"
+    "android": "expo start --android --port 8082",
+    "ios": "expo start --ios --port 8082",
+    "web": "expo start --web --port 8082",
+    "web:clear": "expo start --web --port 8082 --clear",
+    "lint": "expo lint",
+    "firebase:login": "npx firebase-tools login",
+    "firebase:deploy-rules": "npx firebase-tools deploy --only firestore:rules --project projetocrud-74bfc"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",

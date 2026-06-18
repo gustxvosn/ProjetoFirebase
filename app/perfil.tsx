@@ -1,5 +1,22 @@
-import { deleteUser, onAuthStateChanged, updateProfile, User } from "firebase/auth";
-import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import {
+  deleteUser,
+  EmailAuthProvider,
+  onAuthStateChanged,
+  reauthenticateWithCredential,
+  updateProfile,
+  User,
+} from "firebase/auth";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  serverTimestamp,
+  setDoc,
+  where,
+} from "firebase/firestore";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -20,8 +37,10 @@ export default function Perfil() {
   const [nome, setNome] = useState("");
   const [telefone, setTelefone] = useState("");
   const [email, setEmail] = useState("");
+  const [senhaConfirmacao, setSenhaConfirmacao] = useState("");
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -34,17 +53,20 @@ export default function Perfil() {
       setEmail(user.email || "");
       setNome(user.displayName || "");
 
-      const perfilRef = doc(db, "usuarios", user.uid);
-      const perfilSnap = await getDoc(perfilRef);
+      try {
+        const perfilSnap = await getDoc(doc(db, "usuarios", user.uid));
 
-      if (perfilSnap.exists()) {
-        const dados = perfilSnap.data();
-        setNome(String(dados.nome || user.displayName || ""));
-        setTelefone(String(dados.telefone || ""));
-        setEmail(String(dados.email || user.email || ""));
+        if (perfilSnap.exists()) {
+          const dados = perfilSnap.data();
+          setNome(String(dados.nome || user.displayName || ""));
+          setTelefone(String(dados.telefone || ""));
+          setEmail(String(dados.email || user.email || ""));
+        }
+      } catch (error: any) {
+        Alert.alert("Erro ao carregar perfil", error.message);
+      } finally {
+        setCarregando(false);
       }
-
-      setCarregando(false);
     });
 
     return unsubscribe;
@@ -54,7 +76,7 @@ export default function Perfil() {
     if (!usuario) return;
 
     if (!nome.trim()) {
-      Alert.alert("Atenção", "Informe o nome do usuário.");
+      Alert.alert("Atencao", "Informe o nome do usuario.");
       return;
     }
 
@@ -82,31 +104,50 @@ export default function Perfil() {
   }
 
   function confirmarExclusao() {
-    Alert.alert(
-      "Excluir perfil",
-      "Deseja excluir os dados do perfil e a conta de autenticação?",
-      [
-        { text: "Cancelar", style: "cancel" },
-        { text: "Excluir", style: "destructive", onPress: excluirPerfil },
-      ]
-    );
+    if (!senhaConfirmacao.trim()) {
+      Alert.alert("Atencao", "Digite sua senha para confirmar a exclusao da conta.");
+      return;
+    }
+
+    Alert.alert("Excluir conta", "Essa acao apaga perfil, produtos e conta de acesso.", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Excluir", style: "destructive", onPress: excluirPerfil },
+    ]);
   }
 
   async function excluirPerfil() {
-    if (!usuario) return;
+    const user = auth.currentUser;
+
+    if (!user || !user.email) {
+      router.replace("/login");
+      return;
+    }
 
     try {
-      await deleteDoc(doc(db, "usuarios", usuario.uid));
-      await deleteUser(usuario);
-      Alert.alert("Sucesso", "Perfil excluído com sucesso.");
+      setExcluindo(true);
+
+      const credencial = EmailAuthProvider.credential(user.email, senhaConfirmacao);
+      await reauthenticateWithCredential(user, credencial);
+
+      const produtosSnap = await getDocs(
+        query(collection(db, "produtos"), where("usuarioId", "==", user.uid))
+      );
+
+      await Promise.all(produtosSnap.docs.map((produto) => deleteDoc(produto.ref)));
+      await deleteDoc(doc(db, "usuarios", user.uid));
+      await deleteUser(user);
+
+      Alert.alert("Sucesso", "Conta excluida com sucesso.");
       router.replace("/login");
     } catch (error: any) {
-      Alert.alert(
-        "Erro ao excluir",
-        error.code === "auth/requires-recent-login"
-          ? "Por segurança, faça login novamente antes de excluir a conta."
-          : error.message
-      );
+      const mensagem =
+        error.code === "auth/invalid-credential" || error.code === "auth/wrong-password"
+          ? "Senha incorreta. Digite a senha usada no login."
+          : error.message;
+
+      Alert.alert("Erro ao excluir", mensagem);
+    } finally {
+      setExcluindo(false);
     }
   }
 
@@ -121,7 +162,7 @@ export default function Perfil() {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.conteudo} keyboardShouldPersistTaps="handled">
-        <Text style={styles.titulo}>Perfil do Usuário</Text>
+        <Text style={styles.titulo}>Perfil do Usuario</Text>
         <Text style={styles.subtitulo}>Consulte, altere ou exclua seus dados cadastrados.</Text>
 
         <Text style={styles.label}>Nome</Text>
@@ -143,12 +184,28 @@ export default function Perfil() {
           onPress={salvarPerfil}
           style={[styles.botaoPrimario, salvando && styles.botaoDesabilitado]}
         >
-          <Text style={styles.textoBotao}>{salvando ? "SALVANDO..." : "SALVAR ALTERAÇÕES"}</Text>
+          <Text style={styles.textoBotao}>{salvando ? "SALVANDO..." : "SALVAR ALTERACOES"}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={confirmarExclusao} style={styles.botaoPerigo}>
-          <Text style={styles.textoBotao}>EXCLUIR PERFIL</Text>
-        </TouchableOpacity>
+        <View style={styles.areaExclusao}>
+          <Text style={styles.label}>Senha para excluir a conta</Text>
+          <TextInput
+            onChangeText={setSenhaConfirmacao}
+            placeholder="Digite sua senha"
+            placeholderTextColor="#6B7280"
+            secureTextEntry
+            style={styles.input}
+            value={senhaConfirmacao}
+          />
+
+          <TouchableOpacity
+            disabled={excluindo}
+            onPress={confirmarExclusao}
+            style={[styles.botaoPerigo, excluindo && styles.botaoDesabilitado]}
+          >
+            <Text style={styles.textoBotao}>{excluindo ? "EXCLUINDO..." : "EXCLUIR CONTA"}</Text>
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity onPress={() => router.back()} style={styles.botaoSecundario}>
           <Text style={styles.textoSecundario}>VOLTAR</Text>
@@ -215,11 +272,16 @@ const styles = StyleSheet.create({
   botaoDesabilitado: {
     opacity: 0.7,
   },
+  areaExclusao: {
+    borderTopColor: "#CBD5E1",
+    borderTopWidth: 1,
+    marginTop: 24,
+    paddingTop: 20,
+  },
   botaoPerigo: {
     alignItems: "center",
     backgroundColor: "#B91C1C",
     borderRadius: 8,
-    marginTop: 12,
     padding: 15,
   },
   botaoSecundario: {
