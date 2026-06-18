@@ -1,12 +1,12 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import "react-native-reanimated";
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  anchor: "login",
 };
 
 export default function RootLayout() {
@@ -15,20 +15,45 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="login" options={{ headerShown: false }} />
+
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
         <Stack.Screen
           name="cadastro"
           options={{
-            title: 'Cadastro',
+            title: "Cadastro",
+          }}
+        />
+
+        <Stack.Screen
+          name="home"
+          options={{
+            title: "Área do Usuário",
+            headerBackVisible: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="perfil"
+          options={{
+            title: "Perfil",
+          }}
+        />
+
+        <Stack.Screen
+          name="produtos"
+          options={{
+            title: "Produtos",
           }}
         />
 
         <Stack.Screen
           name="modal"
           options={{
-            presentation: 'modal',
-            title: 'Modal',
+            presentation: "modal",
+            title: "Modal",
           }}
         />
       </Stack>
