@@ -1,6 +1,6 @@
-const DEMO_ADMIN_KEY = "laundry-monitor-demo-admin";
+const DEMO_ROLE_KEY = "hygienic-pro-demo-role";
 
-let demoAdminActive = false;
+let demoRoleActive: string | null = null;
 
 function browserStorage() {
   const runtime = globalThis as typeof globalThis & {
@@ -14,25 +14,33 @@ function browserStorage() {
   return runtime.localStorage;
 }
 
-export function isAdminCredentials(email: string, password: string) {
+export function isDemoCredentials(email: string, password: string, role: string) {
   const normalizedEmail = email.trim().toLowerCase();
-  return (normalizedEmail === "admin" || normalizedEmail === "admin@laundry.local") && password === "1234";
+  return normalizedEmail === "demo" && password === "1234";
 }
 
-export function startDemoAdminSession() {
-  demoAdminActive = true;
-  browserStorage()?.setItem(DEMO_ADMIN_KEY, "true");
+export function startDemoSession(role: string) {
+  demoRoleActive = role;
+  browserStorage()?.setItem(DEMO_ROLE_KEY, role);
 }
 
-export function clearDemoAdminSession() {
-  demoAdminActive = false;
-  browserStorage()?.removeItem(DEMO_ADMIN_KEY);
+export function clearDemoSession() {
+  demoRoleActive = null;
+  browserStorage()?.removeItem(DEMO_ROLE_KEY);
 }
 
-export function isDemoAdminActive() {
-  return demoAdminActive || browserStorage()?.getItem(DEMO_ADMIN_KEY) === "true";
+export function getDemoRole() {
+  return demoRoleActive || browserStorage()?.getItem(DEMO_ROLE_KEY);
 }
 
-export function getDemoAdminName() {
-  return "Admin";
+export function isDemoActive() {
+  return getDemoRole() !== null;
+}
+
+export function getDemoName() {
+  const role = getDemoRole();
+  if (role === "gestor") return "Gestor (Demo)";
+  if (role === "funcionario") return "Funcionário (Demo)";
+  if (role === "cliente") return "Cliente (Demo)";
+  return "Usuário (Demo)";
 }

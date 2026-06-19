@@ -16,34 +16,29 @@ import {
   View,
 } from "react-native";
 import { auth } from "../services/firebase";
-import { isAdminCredentials, startDemoAdminSession } from "../services/demoAuth";
-
-const COLORS = {
-  background: "#F8F6F0",
-  blue: "#1E88E5",
-  blueDark: "#0F5EA8",
-  ink: "#172033",
-  muted: "#657080",
-  line: "#E4DED2",
-  white: "#FFFFFF",
-};
+import { isDemoCredentials, startDemoSession } from "../services/demoAuth";
+import { COLORS } from "@/constants/theme";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [carregando, setCarregando] = useState(false);
+  const [perfil, setPerfil] = useState<"gestor" | "funcionario" | "cliente">("cliente");
+  
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [senhaFocused, setSenhaFocused] = useState(false);
 
   async function entrar() {
     if (!email.trim() || !senha.trim()) {
-      Alert.alert("Atencao", "Informe e-mail e senha.");
+      Alert.alert("Atenção", "Informe e-mail e senha.");
       return;
     }
 
     try {
       setCarregando(true);
 
-      if (isAdminCredentials(email, senha)) {
-        startDemoAdminSession();
+      if (isDemoCredentials(email, senha, perfil)) {
+        startDemoSession(perfil);
         router.replace("/home");
         return;
       }
@@ -68,63 +63,97 @@ export default function Login() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          <View style={styles.heroLayer}>
-            <View style={styles.heroBlue} />
-            <View style={styles.heroWash} />
-            <View style={styles.heroBubbleLarge} />
-            <View style={styles.heroBubbleSmall} />
+          {/* Back button */}
+          <View style={styles.topHeader}>
+            <Pressable onPress={() => router.replace("/")} style={styles.backButton}>
+              <Ionicons color={COLORS.text} name="arrow-back" size={24} />
+            </Pressable>
           </View>
 
+          {/* Brand/Header block */}
           <View style={styles.brandBlock}>
             <View style={styles.logoMark}>
-              <MaterialCommunityIcons color={COLORS.white} name="washing-machine" size={28} />
+              <MaterialCommunityIcons color={COLORS.white} name="shield-check" size={28} />
             </View>
-            <Text style={styles.eyebrow}>Laundry Monitor</Text>
-            <Text style={styles.title}>Controle limpo, rapido e visual.</Text>
+            <Text style={styles.eyebrow}>HygienicPro</Text>
+            <Text style={styles.title}>Controle sanitário inteligente.</Text>
             <Text style={styles.subtitle}>
-              Acesse o painel para acompanhar maquinas, ciclos e alertas de conclusao.
+              Acesse o painel para monitorar ciclos de higienização de equipamentos em tempo real.
             </Text>
           </View>
 
+          {/* Login Card */}
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>Entrar</Text>
               <View style={styles.secureBadge}>
-                <Ionicons color={COLORS.blue} name="shield-checkmark" size={15} />
+                <Ionicons color={COLORS.accentLight} name="shield-checkmark" size={15} />
                 <Text style={styles.secureText}>Seguro</Text>
               </View>
             </View>
 
-            <View style={styles.demoAccess}>
-              <Ionicons color={COLORS.blue} name="key-outline" size={18} />
-              <Text style={styles.demoAccessText}>Admin: usuario admin, senha 1234</Text>
+
+
+            {/* Role Selector */}
+            <Text style={styles.label}>Selecione seu perfil:</Text>
+            <View style={styles.roleSelector}>
+              <Pressable 
+                style={[styles.roleButton, perfil === "cliente" && styles.roleButtonActive]}
+                onPress={() => setPerfil("cliente")}
+              >
+                <Ionicons name="person-outline" size={16} color={perfil === "cliente" ? COLORS.white : COLORS.textMuted} />
+                <Text style={[styles.roleText, perfil === "cliente" && styles.roleTextActive]}>Cliente</Text>
+              </Pressable>
+              
+              <Pressable 
+                style={[styles.roleButton, perfil === "funcionario" && styles.roleButtonActive]}
+                onPress={() => setPerfil("funcionario")}
+              >
+                <Ionicons name="briefcase-outline" size={16} color={perfil === "funcionario" ? COLORS.white : COLORS.textMuted} />
+                <Text style={[styles.roleText, perfil === "funcionario" && styles.roleTextActive]}>Funcionário</Text>
+              </Pressable>
+              
+              <Pressable 
+                style={[styles.roleButton, perfil === "gestor" && styles.roleButtonActive]}
+                onPress={() => setPerfil("gestor")}
+              >
+                <Ionicons name="shield-checkmark-outline" size={16} color={perfil === "gestor" ? COLORS.white : COLORS.textMuted} />
+                <Text style={[styles.roleText, perfil === "gestor" && styles.roleTextActive]}>Gestor</Text>
+              </Pressable>
             </View>
 
-            <View style={styles.inputWrap}>
-              <Ionicons color={COLORS.muted} name="mail-outline" size={20} />
+            {/* Email input */}
+            <View style={[styles.inputWrap, emailFocused && styles.inputWrapFocused]}>
+              <Ionicons color={emailFocused ? COLORS.accent : COLORS.textMuted} name="mail-outline" size={20} />
               <TextInput
                 autoCapitalize="none"
                 keyboardType="email-address"
                 onChangeText={setEmail}
+                onFocus={() => setEmailFocused(true)}
+                onBlur={() => setEmailFocused(false)}
                 placeholder="E-mail"
-                placeholderTextColor="#8A93A0"
+                placeholderTextColor={COLORS.textMuted}
                 style={styles.input}
                 value={email}
               />
             </View>
 
-            <View style={styles.inputWrap}>
-              <Ionicons color={COLORS.muted} name="lock-closed-outline" size={20} />
+            {/* Password input */}
+            <View style={[styles.inputWrap, senhaFocused && styles.inputWrapFocused]}>
+              <Ionicons color={senhaFocused ? COLORS.accent : COLORS.textMuted} name="lock-closed-outline" size={20} />
               <TextInput
                 onChangeText={setSenha}
+                onFocus={() => setSenhaFocused(true)}
+                onBlur={() => setSenhaFocused(false)}
                 placeholder="Senha"
-                placeholderTextColor="#8A93A0"
+                placeholderTextColor={COLORS.textMuted}
                 secureTextEntry
                 style={styles.input}
                 value={senha}
               />
             </View>
 
+            {/* Submit button */}
             <Pressable
               disabled={carregando}
               onPress={entrar}
@@ -138,14 +167,15 @@ export default function Login() {
                 <ActivityIndicator color={COLORS.white} />
               ) : (
                 <>
-                  <Text style={styles.primaryButtonText}>Entrar no painel</Text>
+                  <Text style={styles.primaryButtonText}>Acessar painel</Text>
                   <Ionicons color={COLORS.white} name="arrow-forward" size={20} />
                 </>
               )}
             </Pressable>
 
+            {/* Register link */}
             <Pressable onPress={() => router.push("/cadastro")} style={styles.linkButton}>
-              <Text style={styles.linkText}>Criar uma conta</Text>
+              <Text style={styles.linkText}>Solicitar cadastro / Criar conta</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -167,178 +197,139 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 20,
   },
-  heroLayer: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: "hidden",
-  },
-  heroBlue: {
-    backgroundColor: COLORS.blue,
-    borderBottomLeftRadius: 80,
-    borderBottomRightRadius: 80,
-    height: 382,
-    left: -28,
-    opacity: 0.96,
-    position: "absolute",
-    right: -28,
-    top: -92,
-  },
-  heroWash: {
-    backgroundColor: "#D9ECFA",
-    borderRadius: 140,
-    height: 280,
-    position: "absolute",
-    right: -96,
-    top: 54,
-    width: 280,
-  },
-  heroBubbleLarge: {
-    backgroundColor: "rgba(255,255,255,0.22)",
-    borderRadius: 48,
-    height: 96,
-    left: 22,
-    position: "absolute",
-    top: 48,
-    width: 96,
-  },
-  heroBubbleSmall: {
-    backgroundColor: "rgba(255,255,255,0.38)",
-    borderRadius: 20,
-    height: 40,
-    position: "absolute",
-    right: 52,
-    top: 30,
-    width: 40,
-  },
   brandBlock: {
-    marginBottom: 34,
-    marginTop: 24,
+    marginBottom: 30,
+    marginTop: 10,
   },
   logoMark: {
     alignItems: "center",
-    backgroundColor: COLORS.blueDark,
-    borderColor: "rgba(255,255,255,0.55)",
-    borderRadius: 22,
-    borderWidth: 1,
-    height: 54,
+    backgroundColor: COLORS.accent,
+    borderRadius: 16,
+    height: 52,
     justifyContent: "center",
-    marginBottom: 18,
-    width: 54,
+    marginBottom: 16,
+    width: 52,
+    shadowColor: COLORS.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
   },
   eyebrow: {
-    color: COLORS.white,
+    color: COLORS.accentLight,
     fontSize: 13,
     fontWeight: "800",
-    letterSpacing: 0,
+    letterSpacing: 1.5,
     marginBottom: 8,
     textTransform: "uppercase",
   },
   title: {
-    color: COLORS.white,
-    fontSize: 31,
+    color: COLORS.text,
+    fontSize: 30,
     fontWeight: "900",
     lineHeight: 36,
-    maxWidth: 310,
   },
   subtitle: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.72)",
-    borderRadius: 14,
-    color: COLORS.blueDark,
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 10,
-    maxWidth: 340,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    color: COLORS.textMuted,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
   },
   card: {
-    backgroundColor: COLORS.white,
-    borderColor: "rgba(30,136,229,0.12)",
-    borderRadius: 28,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: 24,
     borderWidth: 1,
     padding: 20,
-    shadowColor: "#1E3551",
-    shadowOffset: { height: 16, width: 0 },
-    shadowOpacity: 0.12,
-    shadowRadius: 28,
+    shadowColor: "#000",
+    shadowOffset: { height: 8, width: 0 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
     elevation: 8,
   },
   cardHeader: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 18,
+    marginBottom: 16,
   },
   cardTitle: {
-    color: COLORS.ink,
-    fontSize: 26,
-    fontWeight: "900",
+    color: COLORS.text,
+    fontSize: 24,
+    fontWeight: "800",
   },
   secureBadge: {
     alignItems: "center",
-    backgroundColor: "#EEF7FF",
+    backgroundColor: "rgba(108, 92, 231, 0.12)",
     borderRadius: 999,
     flexDirection: "row",
     gap: 6,
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 6,
   },
   secureText: {
-    color: COLORS.blue,
+    color: COLORS.accentLight,
     fontSize: 12,
-    fontWeight: "800",
-  },
-  inputWrap: {
-    alignItems: "center",
-    backgroundColor: "#FBFAF7",
-    borderColor: COLORS.line,
-    borderRadius: 18,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 12,
-    minHeight: 56,
-    paddingHorizontal: 14,
+    fontWeight: "700",
   },
   demoAccess: {
     alignItems: "center",
-    backgroundColor: "#EAF5FF",
-    borderColor: "#BBDDF6",
-    borderRadius: 16,
+    backgroundColor: "rgba(108, 92, 231, 0.08)",
+    borderColor: "rgba(108, 92, 231, 0.2)",
+    borderRadius: 12,
     borderWidth: 1,
     flexDirection: "row",
     gap: 8,
-    marginBottom: 14,
+    marginBottom: 16,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   demoAccessText: {
-    color: COLORS.blueDark,
+    color: COLORS.accentLight,
     flex: 1,
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "600",
+  },
+  inputWrap: {
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceAlt,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
+    minHeight: 52,
+    paddingHorizontal: 14,
+  },
+  inputWrapFocused: {
+    borderColor: COLORS.accent,
+    backgroundColor: `${COLORS.accent}05`,
   },
   input: {
-    color: COLORS.ink,
+    color: COLORS.text,
     flex: 1,
-    fontSize: 16,
-    minHeight: 54,
+    fontSize: 15,
+    minHeight: 50,
+    ...Platform.select({
+      web: { outlineStyle: "none" },
+    }),
   },
   primaryButton: {
     alignItems: "center",
-    backgroundColor: COLORS.blue,
-    borderRadius: 18,
+    backgroundColor: COLORS.accent,
+    borderRadius: 14,
     flexDirection: "row",
     gap: 10,
     justifyContent: "center",
     marginTop: 8,
-    minHeight: 56,
-    padding: 15,
-    shadowColor: COLORS.blue,
-    shadowOffset: { height: 12, width: 0 },
-    shadowOpacity: 0.28,
-    shadowRadius: 18,
-    elevation: 5,
+    minHeight: 52,
+    padding: 14,
+    shadowColor: COLORS.accent,
+    shadowOffset: { height: 6, width: 0 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 4,
   },
   primaryButtonPressed: {
     opacity: 0.88,
@@ -350,7 +341,7 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: COLORS.white,
     fontSize: 16,
-    fontWeight: "900",
+    fontWeight: "700",
   },
   linkButton: {
     alignItems: "center",
@@ -358,8 +349,63 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   linkText: {
-    color: COLORS.blue,
-    fontSize: 15,
-    fontWeight: "800",
+    color: COLORS.accentLight,
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  topHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    marginTop: 10,
+  },
+  backButton: {
+    alignItems: "center",
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  label: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  roleSelector: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 20,
+  },
+  roleButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: COLORS.surfaceAlt,
+    borderColor: COLORS.border,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  roleButtonActive: {
+    backgroundColor: COLORS.accent,
+    borderColor: COLORS.accent,
+  },
+  roleText: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  roleTextActive: {
+    color: COLORS.white,
   },
 });

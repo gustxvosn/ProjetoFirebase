@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { onAuthStateChanged, User } from "firebase/auth";
 import {
   addDoc,
@@ -25,6 +26,7 @@ import {
   View,
 } from "react-native";
 import { auth, db } from "../services/firebase";
+import { COLORS } from "@/constants/theme";
 
 type Produto = {
   id: string;
@@ -46,7 +48,7 @@ export default function Produtos() {
   const [salvando, setSalvando] = useState(false);
 
   const tituloFormulario = useMemo(
-    () => (produtoEditandoId ? "Editar produto" : "Novo produto"),
+    () => (produtoEditandoId ? "Editar Insumo" : "Novo Insumo/Produto"),
     [produtoEditandoId]
   );
 
@@ -132,7 +134,7 @@ export default function Produtos() {
 
   function validarFormulario() {
     if (!nome.trim() || !categoria.trim() || !preco.trim() || !quantidade.trim()) {
-      Alert.alert("Atenção", "Preencha todos os campos do produto.");
+      Alert.alert("Atenção", "Preencha todos os campos.");
       return false;
     }
 
@@ -176,7 +178,7 @@ export default function Produtos() {
             )
             .sort((a, b) => a.nome.localeCompare(b.nome))
         );
-        Alert.alert("Sucesso", "Produto atualizado com sucesso.");
+        Alert.alert("Sucesso", "Item atualizado com sucesso.");
       } else {
         const produtoRef = await addDoc(collection(db, "produtos"), {
           ...dadosProduto,
@@ -194,7 +196,7 @@ export default function Produtos() {
             },
           ].sort((a, b) => a.nome.localeCompare(b.nome))
         );
-        Alert.alert("Sucesso", "Produto cadastrado com sucesso.");
+        Alert.alert("Sucesso", "Item cadastrado com sucesso.");
       }
 
       await carregarProdutos(usuario.uid);
@@ -215,7 +217,7 @@ export default function Produtos() {
   }
 
   function confirmarExclusao(produto: Produto) {
-    Alert.alert("Excluir produto", `Deseja excluir "${produto.nome}"?`, [
+    Alert.alert("Excluir Item", `Deseja excluir "${produto.nome}"?`, [
       { text: "Cancelar", style: "cancel" },
       { text: "Excluir", style: "destructive", onPress: () => excluirProduto(produto.id) },
     ]);
@@ -225,7 +227,7 @@ export default function Produtos() {
     try {
       await deleteDoc(doc(db, "produtos", id));
       if (produtoEditandoId === id) limparFormulario();
-      Alert.alert("Sucesso", "Produto excluído com sucesso.");
+      Alert.alert("Sucesso", "Item excluído com sucesso.");
     } catch (error: any) {
       Alert.alert("Erro ao excluir", error.message);
     }
@@ -233,49 +235,65 @@ export default function Produtos() {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Custom Header Bar */}
+      <View style={styles.topHeader}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons color={COLORS.text} name="arrow-back" size={24} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Insumos & Produtos</Text>
+        <View style={{ width: 44 }} />
+      </View>
+
       <FlatList
         ListHeaderComponent={
           <View>
-            <Text style={styles.titulo}>Cadastro de Produtos</Text>
-            <Text style={styles.subtitulo}>Cadastre, consulte, edite e exclua produtos.</Text>
+            <Text style={styles.subtitulo}>Controle de estoque de produtos químicos e higienizadores.</Text>
 
             <View style={styles.formulario}>
               <Text style={styles.formTitulo}>{tituloFormulario}</Text>
 
-              <TextInput
-                onChangeText={setNome}
-                placeholder="Nome do produto"
-                placeholderTextColor="#6B7280"
-                style={styles.input}
-                value={nome}
-              />
+              <View style={styles.inputWrap}>
+                <TextInput
+                  onChangeText={setNome}
+                  placeholder="Nome do insumo/produto"
+                  placeholderTextColor={COLORS.textMuted}
+                  style={styles.input}
+                  value={nome}
+                />
+              </View>
 
-              <TextInput
-                onChangeText={setCategoria}
-                placeholder="Categoria"
-                placeholderTextColor="#6B7280"
-                style={styles.input}
-                value={categoria}
-              />
+              <View style={styles.inputWrap}>
+                <TextInput
+                  onChangeText={setCategoria}
+                  placeholder="Categoria (ex: Detergentes, Desinfetantes)"
+                  placeholderTextColor={COLORS.textMuted}
+                  style={styles.input}
+                  value={categoria}
+                />
+              </View>
 
               <View style={styles.linha}>
-                <TextInput
-                  keyboardType="decimal-pad"
-                  onChangeText={setPreco}
-                  placeholder="Preço"
-                  placeholderTextColor="#6B7280"
-                  style={[styles.input, styles.inputLinha]}
-                  value={preco}
-                />
+                <View style={[styles.inputWrap, styles.inputLinha]}>
+                  <TextInput
+                    keyboardType="decimal-pad"
+                    onChangeText={setPreco}
+                    placeholder="Preço (R$)"
+                    placeholderTextColor={COLORS.textMuted}
+                    style={styles.input}
+                    value={preco}
+                  />
+                </View>
 
-                <TextInput
-                  keyboardType="number-pad"
-                  onChangeText={setQuantidade}
-                  placeholder="Qtd."
-                  placeholderTextColor="#6B7280"
-                  style={[styles.input, styles.inputLinha]}
-                  value={quantidade}
-                />
+                <View style={[styles.inputWrap, styles.inputLinha]}>
+                  <TextInput
+                    keyboardType="number-pad"
+                    onChangeText={setQuantidade}
+                    placeholder="Quantidade"
+                    placeholderTextColor={COLORS.textMuted}
+                    style={styles.input}
+                    value={quantidade}
+                  />
+                </View>
               </View>
 
               <TouchableOpacity
@@ -284,7 +302,7 @@ export default function Produtos() {
                 style={[styles.botaoPrimario, salvando && styles.botaoDesabilitado]}
               >
                 <Text style={styles.textoBotao}>
-                  {salvando ? "SALVANDO..." : produtoEditandoId ? "ATUALIZAR" : "CADASTRAR"}
+                  {salvando ? "SALVANDO..." : produtoEditandoId ? "ATUALIZAR ITEM" : "CADASTRAR ITEM"}
                 </Text>
               </TouchableOpacity>
 
@@ -295,22 +313,22 @@ export default function Produtos() {
               ) : null}
             </View>
 
-            <Text style={styles.listaTitulo}>Produtos cadastrados</Text>
-            {carregando ? <ActivityIndicator color="#0F766E" style={styles.loading} /> : null}
+            <Text style={styles.listaTitulo}>Itens Cadastrados</Text>
+            {carregando ? <ActivityIndicator color={COLORS.accent} style={styles.loading} /> : null}
           </View>
         }
         contentContainerStyle={styles.conteudo}
         data={produtos}
         keyExtractor={(item) => item.id}
         ListEmptyComponent={
-          !carregando ? <Text style={styles.vazio}>Nenhum produto cadastrado.</Text> : null
+          !carregando ? <Text style={styles.vazio}>Nenhum insumo cadastrado.</Text> : null
         }
         renderItem={({ item }) => (
           <View style={styles.produtoCard}>
             <View style={styles.produtoInfo}>
               <Text style={styles.produtoNome}>{item.nome}</Text>
               <Text style={styles.produtoDetalhe}>
-                {item.categoria} | R$ {item.preco.toFixed(2)} | Qtd: {item.quantidade}
+                {item.categoria}  •  R$ {item.preco.toFixed(2)}  •  Estoque: {item.quantidade}
               </Text>
             </View>
 
@@ -325,6 +343,7 @@ export default function Produtos() {
             </View>
           </View>
         )}
+        showsVerticalScrollIndicator={false}
       />
     </SafeAreaView>
   );
@@ -333,48 +352,58 @@ export default function Produtos() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.background,
   },
   conteudo: {
     padding: 20,
-    paddingBottom: 34,
+    paddingBottom: 40,
   },
   titulo: {
-    color: "#111827",
+    color: COLORS.text,
     fontSize: 28,
-    fontWeight: "800",
+    fontWeight: "900",
     marginTop: 8,
   },
   subtitulo: {
-    color: "#475569",
-    fontSize: 15,
-    lineHeight: 21,
-    marginBottom: 18,
+    color: COLORS.textMuted,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 20,
     marginTop: 6,
   },
   formulario: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#E5E7EB",
-    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: 24,
     borderWidth: 1,
-    marginBottom: 22,
+    marginBottom: 24,
     padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { height: 6, width: 0 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 3,
   },
   formTitulo: {
-    color: "#0F172A",
-    fontSize: 19,
-    fontWeight: "700",
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "800",
     marginBottom: 14,
   },
-  input: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#CBD5E1",
-    borderRadius: 8,
+  inputWrap: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderColor: COLORS.border,
+    borderRadius: 12,
     borderWidth: 1,
-    color: "#111827",
-    fontSize: 16,
     marginBottom: 12,
-    padding: 13,
+    paddingHorizontal: 12,
+    minHeight: 48,
+    justifyContent: "center",
+  },
+  input: {
+    color: COLORS.text,
+    fontSize: 15,
+    minHeight: 46,
   },
   linha: {
     flexDirection: "row",
@@ -385,34 +414,40 @@ const styles = StyleSheet.create({
   },
   botaoPrimario: {
     alignItems: "center",
-    backgroundColor: "#0F766E",
-    borderRadius: 8,
+    backgroundColor: COLORS.accent,
+    borderRadius: 12,
     padding: 14,
+    marginTop: 4,
+    shadowColor: COLORS.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
   },
   botaoDesabilitado: {
     opacity: 0.7,
   },
   botaoSecundario: {
     alignItems: "center",
-    borderColor: "#94A3B8",
-    borderRadius: 8,
+    borderColor: COLORS.border,
+    borderRadius: 12,
     borderWidth: 1,
     marginTop: 10,
-    padding: 13,
+    padding: 12,
   },
   textoBotao: {
-    color: "#FFFFFF",
+    color: COLORS.white,
     fontSize: 15,
     fontWeight: "700",
   },
   textoSecundario: {
-    color: "#334155",
+    color: COLORS.text,
     fontSize: 14,
     fontWeight: "700",
   },
   listaTitulo: {
-    color: "#0F172A",
-    fontSize: 20,
+    color: COLORS.text,
+    fontSize: 18,
     fontWeight: "800",
     marginBottom: 12,
   },
@@ -420,14 +455,15 @@ const styles = StyleSheet.create({
     marginVertical: 16,
   },
   vazio: {
-    color: "#64748B",
-    fontSize: 15,
+    color: COLORS.textMuted,
+    fontSize: 14,
     textAlign: "center",
+    marginVertical: 20,
   },
   produtoCard: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#E5E7EB",
-    borderRadius: 8,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: 18,
     borderWidth: 1,
     marginBottom: 12,
     padding: 14,
@@ -436,13 +472,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   produtoNome: {
-    color: "#111827",
+    color: COLORS.text,
     fontSize: 17,
-    fontWeight: "700",
+    fontWeight: "800",
   },
   produtoDetalhe: {
-    color: "#475569",
-    fontSize: 14,
+    color: COLORS.textMuted,
+    fontSize: 13,
     marginTop: 4,
   },
   acoes: {
@@ -451,20 +487,54 @@ const styles = StyleSheet.create({
   },
   botaoEditar: {
     alignItems: "center",
-    backgroundColor: "#2563EB",
-    borderRadius: 8,
+    backgroundColor: "rgba(108, 92, 231, 0.12)",
+    borderColor: "rgba(108, 92, 231, 0.3)",
+    borderRadius: 10,
+    borderWidth: 1,
     flex: 1,
-    padding: 11,
+    padding: 10,
   },
   botaoExcluir: {
     alignItems: "center",
-    backgroundColor: "#B91C1C",
-    borderRadius: 8,
+    backgroundColor: "rgba(225, 112, 85, 0.08)",
+    borderColor: "rgba(225, 112, 85, 0.2)",
+    borderRadius: 10,
+    borderWidth: 1,
     flex: 1,
-    padding: 11,
+    padding: 10,
   },
   textoAcao: {
-    color: "#FFFFFF",
+    color: COLORS.text,
     fontWeight: "700",
+    fontSize: 13,
+  },
+  topHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  backButton: {
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceAlt,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  headerTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "900",
   },
 });

@@ -1,64 +1,47 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from "@react-navigation/native";
+import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
-
-import { useColorScheme } from "@/hooks/use-color-scheme";
+import { COLORS } from "@/constants/theme";
 
 export const unstable_settings = {
   anchor: "login",
 };
 
+const CustomDarkTheme = {
+  ...DarkTheme,
+  dark: true,
+  colors: {
+    ...DarkTheme.colors,
+    primary: COLORS.accent,
+    background: COLORS.background,
+    card: COLORS.surface,
+    text: COLORS.text,
+    border: COLORS.border,
+  },
+};
+
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="login" options={{ headerShown: false }} />
-
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-
-        <Stack.Screen
-          name="cadastro"
-          options={{
-            title: "Cadastro",
-          }}
-        />
-
-        <Stack.Screen
-          name="home"
-          options={{
-            title: "Área do Usuário",
-            headerBackVisible: false,
-          }}
-        />
-
-        <Stack.Screen
-          name="perfil"
-          options={{
-            title: "Perfil",
-          }}
-        />
-
-        <Stack.Screen
-          name="produtos"
-          options={{
-            title: "Produtos",
-          }}
-        />
-
-        <Stack.Screen
-          name="modal"
-          options={{
-            presentation: "modal",
-            title: "Modal",
-          }}
-        />
+    <ThemeProvider value={CustomDarkTheme}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+        }}
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="login" />
+        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="cadastro" />
+        <Stack.Screen name="home" />
+        <Stack.Screen name="perfil" />
+        <Stack.Screen name="produtos" />
+        <Stack.Screen name="camera" />
+        <Stack.Screen name="gerar-qr" />
+        <Stack.Screen name="modal" options={{ presentation: "modal" }} />
       </Stack>
 
-      <StatusBar style="auto" />
+      <StatusBar style="light" />
     </ThemeProvider>
   );
 }

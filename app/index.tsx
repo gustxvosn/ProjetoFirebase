@@ -8,38 +8,26 @@ import {
   Text,
   View,
 } from "react-native";
-
-const COLORS = {
-  background: "#F8F6F0",
-  blue: "#1E88E5",
-  blueDark: "#0F5EA8",
-  ink: "#172033",
-  muted: "#657080",
-  card: "#FFFFFF",
-  line: "#E7E0D3",
-  clean: "#16A34A",
-  dirty: "#F97316",
-  wash: "#2BA8F8",
-};
+import { COLORS } from "@/constants/theme";
 
 const FEATURES = [
   {
     icon: "qrcode-scan" as const,
-    title: "QR Code por maquina",
-    text: "Identifique cada lavadora ou secadora com leitura rapida e status individual.",
-    color: COLORS.blue,
+    title: "Leitura de QR Code",
+    text: "Identifique lavadoras, secadoras e autoclaves instantaneamente por QR Code.",
+    color: COLORS.accent,
   },
   {
-    icon: "chart-bar" as const,
-    title: "Historico de ciclos",
-    text: "Acompanhe uso, limpeza e produtividade em graficos simples para decisao diaria.",
-    color: COLORS.clean,
+    icon: "shield-check-outline" as const,
+    title: "Histórico de Higienização",
+    text: "Acompanhe ciclos de limpeza e conformidade com relatórios operacionais dinâmicos.",
+    color: COLORS.success,
   },
   {
-    icon: "bell-ring-outline" as const,
-    title: "Alertas operacionais",
-    text: "Receba aviso de conclusao e reduza tempo parado entre um ciclo e outro.",
-    color: COLORS.dirty,
+    icon: "bell-badge-outline" as const,
+    title: "Alertas Inteligentes",
+    text: "Notificações push imediatas ao concluir ciclos, minimizando o tempo de ociosidade.",
+    color: COLORS.warning,
   },
 ];
 
@@ -47,108 +35,119 @@ export default function Landing() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Header Block */}
+        <View style={styles.header}>
+          <View style={styles.logoBlock}>
+            <View style={styles.logoMark}>
+              <MaterialCommunityIcons color={COLORS.white} name="shield-check" size={26} />
+            </View>
+            <Text style={styles.logoText}>Hygienic<Text style={{ color: COLORS.accent }}>Pro</Text></Text>
+          </View>
+          <Pressable onPress={() => router.push("/login")} style={styles.navButton}>
+            <Text style={styles.navText}>Entrar</Text>
+          </Pressable>
+        </View>
+
+        {/* Hero Banner */}
         <View style={styles.hero}>
-          <View style={styles.heroTop}>
-            <View style={styles.logo}>
-              <MaterialCommunityIcons color={COLORS.blue} name="washing-machine" size={27} />
+          <View style={styles.heroCopy}>
+            <Text style={styles.eyebrow}>Monitoramento Industrial</Text>
+            <Text style={styles.title}>Eficiência e controle sanitário na palma da mão.</Text>
+            <Text style={styles.subtitle}>
+              Gerencie ciclos de higienização de lavanderias profissionais por QR Code. Acompanhe o status das máquinas em tempo real.
+            </Text>
+
+            <View style={styles.ctaRow}>
+              <Pressable
+                onPress={() => router.push("/login")}
+                style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+              >
+                <Text style={styles.primaryText}>Acessar painel</Text>
+                <Ionicons color="#FFFFFF" name="arrow-forward" size={20} />
+              </Pressable>
             </View>
-            <Pressable onPress={() => router.push("/login")} style={styles.navButton}>
-              <Text style={styles.navText}>Entrar</Text>
-            </Pressable>
           </View>
 
-          <View style={styles.heroBody}>
-            <View style={styles.heroCopy}>
-              <Text style={styles.eyebrow}>Laundry Monitor</Text>
-              <Text style={styles.title}>Gestao visual para lavanderias inteligentes.</Text>
-              <Text style={styles.subtitle}>
-                Monitore maquinas por QR Code, acompanhe status em tempo real e organize ciclos
-                de limpeza em um painel pensado para celular.
-              </Text>
-
-              <View style={styles.ctaRow}>
-                <Pressable
-                  onPress={() => router.push("/login")}
-                  style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
-                >
-                  <Text style={styles.primaryText}>Acessar painel</Text>
-                  <Ionicons color="#FFFFFF" name="arrow-forward" size={20} />
-                </Pressable>
+          {/* Interactive UI Mockup */}
+          <View style={styles.deviceScene}>
+            <View style={styles.deviceHeader}>
+              <View>
+                <Text style={styles.deviceLabel}>Equipamento L-01</Text>
+                <Text style={styles.deviceTitle}>Higienizando</Text>
+              </View>
+              <View style={styles.qrIconWrap}>
+                <MaterialCommunityIcons color={COLORS.accent} name="qrcode-scan" size={24} />
               </View>
             </View>
-
-            <View style={styles.deviceScene}>
-              <View style={styles.deviceHeader}>
-                <View>
-                  <Text style={styles.deviceLabel}>Lavadora 01</Text>
-                  <Text style={styles.deviceTitle}>Lavando</Text>
-                </View>
-                <MaterialCommunityIcons color={COLORS.blue} name="qrcode-scan" size={28} />
+            <View style={styles.machineVisual}>
+              <View style={styles.machineWindow}>
+                <MaterialCommunityIcons color={COLORS.accent} name="cached" size={50} style={styles.spinIcon} />
               </View>
-              <View style={styles.machineVisual}>
-                <View style={styles.machineWindow}>
-                  <MaterialCommunityIcons color={COLORS.wash} name="waves" size={56} />
-                </View>
-                <View style={styles.bubbleOne} />
-                <View style={styles.bubbleTwo} />
+              <View style={styles.bubbleOne} />
+              <View style={styles.bubbleTwo} />
+            </View>
+            <View style={styles.statusRow}>
+              <View style={styles.statusChip}>
+                <Ionicons color={COLORS.success} name="checkmark-circle" size={16} />
+                <Text style={styles.statusText}>Limpo</Text>
               </View>
-              <View style={styles.statusRow}>
-                <View style={styles.statusChip}>
-                  <Ionicons color={COLORS.clean} name="checkmark-circle" size={17} />
-                  <Text style={styles.statusText}>Limpo</Text>
-                </View>
-                <View style={styles.statusChip}>
-                  <Ionicons color={COLORS.dirty} name="alert-circle" size={17} />
-                  <Text style={styles.statusText}>Sujo</Text>
-                </View>
-                <View style={[styles.statusChip, styles.statusActive]}>
-                  <Ionicons color={COLORS.blue} name="water" size={17} />
-                  <Text style={[styles.statusText, styles.statusActiveText]}>18 min</Text>
-                </View>
+              <View style={styles.statusChip}>
+                <Ionicons color={COLORS.danger} name="alert-circle" size={16} />
+                <Text style={styles.statusText}>Pendente</Text>
+              </View>
+              <View style={[styles.statusChip, styles.statusActive]}>
+                <Ionicons color={COLORS.accent} name="time" size={16} />
+                <Text style={[styles.statusText, styles.statusActiveText]}>18 min</Text>
               </View>
             </View>
           </View>
         </View>
 
+        {/* Quick Metrics */}
         <View style={styles.metricsRow}>
-          <View style={styles.metric}>
+          <View style={styles.metricCard}>
             <Text style={styles.metricValue}>3</Text>
-            <Text style={styles.metricLabel}>status de maquina</Text>
+            <Text style={styles.metricLabel}>Status em tempo real</Text>
           </View>
-          <View style={styles.metric}>
+          <View style={styles.metricCard}>
             <Text style={styles.metricValue}>QR</Text>
-            <Text style={styles.metricLabel}>identificacao rapida</Text>
+            <Text style={styles.metricLabel}>Acesso instantâneo</Text>
           </View>
-          <View style={styles.metric}>
-            <Text style={styles.metricValue}>24h</Text>
-            <Text style={styles.metricLabel}>visao operacional</Text>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>100%</Text>
+            <Text style={styles.metricLabel}>Visão operacional</Text>
           </View>
         </View>
 
+        {/* Section Header */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>O que o site oferece</Text>
+          <Text style={styles.sectionTitle}>Recursos HygienicPro</Text>
           <Text style={styles.sectionSubtitle}>
-            Um fluxo simples para equipes que precisam saber o que esta limpo, sujo ou em ciclo.
+            Um fluxo simplificado desenvolvido para equipes que exigem padrões rigorosos de controle.
           </Text>
         </View>
 
+        {/* Features list */}
         <View style={styles.features}>
           {FEATURES.map((feature) => (
             <View key={feature.title} style={styles.featureCard}>
-              <View style={[styles.featureIcon, { backgroundColor: `${feature.color}18` }]}>
-                <MaterialCommunityIcons color={feature.color} name={feature.icon} size={25} />
+              <View style={[styles.featureIcon, { backgroundColor: `${feature.color}15` }]}>
+                <MaterialCommunityIcons color={feature.color} name={feature.icon} size={24} />
               </View>
-              <Text style={styles.featureTitle}>{feature.title}</Text>
-              <Text style={styles.featureText}>{feature.text}</Text>
+              <View style={styles.featureTextContainer}>
+                <Text style={styles.featureTitle}>{feature.title}</Text>
+                <Text style={styles.featureText}>{feature.text}</Text>
+              </View>
             </View>
           ))}
         </View>
 
+        {/* Demo Credentials Box */}
         <View style={styles.loginInfo}>
-          <Ionicons color={COLORS.blue} name="key" size={22} />
+          <Ionicons color={COLORS.accent} name="key-sharp" size={24} />
           <View style={styles.loginInfoText}>
-            <Text style={styles.loginInfoTitle}>Acesso admin de teste</Text>
-            <Text style={styles.loginInfoBody}>Usuario: admin  |  Senha: 1234</Text>
+            <Text style={styles.loginInfoTitle}>Acesso para Demonstração</Text>
+            <Text style={styles.loginInfoBody}>E-mail: admin  |  Senha: 1234</Text>
           </View>
         </View>
       </ScrollView>
@@ -163,101 +162,123 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    paddingBottom: 34,
+    paddingBottom: 40,
   },
-  hero: {
-    backgroundColor: COLORS.blue,
-    borderRadius: 30,
-    minHeight: 620,
-    overflow: "hidden",
-    padding: 18,
-  },
-  heroTop: {
+  header: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 18,
+    marginBottom: 24,
+    marginTop: 10,
   },
-  logo: {
+  logoBlock: {
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    height: 48,
+    flexDirection: "row",
+    gap: 10,
+  },
+  logoMark: {
+    alignItems: "center",
+    backgroundColor: COLORS.accent,
+    borderRadius: 12,
+    height: 42,
     justifyContent: "center",
-    width: 48,
+    width: 42,
+    shadowColor: COLORS.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  logoText: {
+    color: COLORS.text,
+    fontSize: 20,
+    fontWeight: "900",
+    letterSpacing: -0.5,
   },
   navButton: {
-    backgroundColor: "rgba(255,255,255,0.16)",
-    borderColor: "rgba(255,255,255,0.32)",
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
     borderRadius: 999,
     borderWidth: 1,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 10,
   },
   navText: {
-    color: "#FFFFFF",
+    color: COLORS.text,
     fontSize: 14,
-    fontWeight: "900",
+    fontWeight: "700",
   },
-  heroBody: {
-    gap: 22,
+  hero: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: 28,
+    borderWidth: 1,
+    padding: 20,
+    gap: 24,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    elevation: 5,
   },
   heroCopy: {
     paddingTop: 4,
   },
   eyebrow: {
-    color: "#EAF5FF",
+    color: COLORS.accentLight,
     fontSize: 13,
-    fontWeight: "900",
-    letterSpacing: 0,
+    fontWeight: "800",
+    letterSpacing: 1.5,
     marginBottom: 10,
     textTransform: "uppercase",
   },
   title: {
-    color: "#FFFFFF",
-    fontSize: 38,
+    color: COLORS.text,
+    fontSize: 32,
     fontWeight: "900",
-    lineHeight: 43,
-    maxWidth: 360,
+    lineHeight: 38,
+    letterSpacing: -0.5,
   },
   subtitle: {
-    color: "#EAF5FF",
-    fontSize: 16,
-    lineHeight: 24,
+    color: COLORS.textMuted,
+    fontSize: 15,
+    lineHeight: 22,
     marginTop: 12,
-    maxWidth: 420,
   },
   ctaRow: {
     alignItems: "flex-start",
-    marginTop: 22,
+    marginTop: 20,
   },
   primaryButton: {
     alignItems: "center",
-    backgroundColor: COLORS.ink,
-    borderRadius: 18,
+    backgroundColor: COLORS.accent,
+    borderRadius: 16,
     flexDirection: "row",
     gap: 10,
-    minHeight: 54,
-    paddingHorizontal: 18,
+    minHeight: 52,
+    paddingHorizontal: 24,
+    shadowColor: COLORS.accent,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 5,
   },
   pressed: {
-    opacity: 0.84,
-    transform: [{ scale: 0.99 }],
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
   },
   primaryText: {
-    color: "#FFFFFF",
+    color: COLORS.white,
     fontSize: 16,
-    fontWeight: "900",
+    fontWeight: "700",
   },
   deviceScene: {
-    backgroundColor: COLORS.card,
-    borderRadius: 28,
-    padding: 18,
-    shadowColor: "#0B3156",
-    shadowOffset: { height: 16, width: 0 },
-    shadowOpacity: 0.22,
-    shadowRadius: 26,
-    elevation: 8,
+    backgroundColor: COLORS.surfaceAlt,
+    borderColor: COLORS.border,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 16,
   },
   deviceHeader: {
     alignItems: "center",
@@ -265,172 +286,190 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   deviceLabel: {
-    color: COLORS.blue,
+    color: COLORS.textMuted,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "700",
   },
   deviceTitle: {
-    color: COLORS.ink,
-    fontSize: 24,
-    fontWeight: "900",
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: "800",
     marginTop: 2,
+  },
+  qrIconWrap: {
+    alignItems: "center",
+    backgroundColor: COLORS.surface,
+    borderRadius: 12,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
   },
   machineVisual: {
     alignItems: "center",
-    height: 178,
+    height: 160,
     justifyContent: "center",
   },
   machineWindow: {
     alignItems: "center",
-    backgroundColor: "#EAF5FF",
-    borderColor: "#BBDDF6",
-    borderRadius: 62,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: 60,
     borderWidth: 2,
-    height: 124,
+    height: 110,
     justifyContent: "center",
-    width: 124,
+    width: 110,
+  },
+  spinIcon: {
+    opacity: 0.85,
   },
   bubbleOne: {
-    backgroundColor: "#A7DAFF",
-    borderRadius: 12,
-    height: 24,
+    backgroundColor: "rgba(108, 92, 231, 0.2)",
+    borderRadius: 10,
+    height: 20,
     position: "absolute",
-    right: 68,
-    top: 34,
-    width: 24,
+    right: 80,
+    top: 30,
+    width: 20,
   },
   bubbleTwo: {
-    backgroundColor: "#D5EEFF",
-    borderRadius: 9,
-    height: 18,
-    left: 78,
+    backgroundColor: "rgba(108, 92, 231, 0.1)",
+    borderRadius: 7,
+    height: 14,
+    left: 90,
     position: "absolute",
-    top: 58,
-    width: 18,
+    top: 50,
+    width: 14,
   },
   statusRow: {
     flexDirection: "row",
     gap: 8,
+    marginTop: 10,
   },
   statusChip: {
     alignItems: "center",
-    backgroundColor: "#FBFAF7",
-    borderColor: COLORS.line,
-    borderRadius: 14,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: 12,
     borderWidth: 1,
     flex: 1,
     flexDirection: "row",
-    gap: 5,
+    gap: 6,
     justifyContent: "center",
-    minHeight: 42,
+    minHeight: 38,
   },
   statusActive: {
-    backgroundColor: "#EAF5FF",
-    borderColor: "#BBDDF6",
+    backgroundColor: "rgba(108, 92, 231, 0.15)",
+    borderColor: COLORS.accent,
   },
   statusText: {
-    color: COLORS.ink,
+    color: COLORS.textMuted,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "700",
   },
   statusActiveText: {
-    color: COLORS.blue,
+    color: COLORS.accentLight,
   },
   metricsRow: {
     flexDirection: "row",
     gap: 10,
-    marginTop: 16,
+    marginBottom: 24,
   },
-  metric: {
+  metricCard: {
     alignItems: "center",
-    backgroundColor: COLORS.card,
-    borderColor: COLORS.line,
-    borderRadius: 22,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: 18,
     borderWidth: 1,
     flex: 1,
-    minHeight: 94,
+    minHeight: 88,
     justifyContent: "center",
-    padding: 10,
+    padding: 8,
   },
   metricValue: {
-    color: COLORS.ink,
-    fontSize: 25,
+    color: COLORS.text,
+    fontSize: 24,
     fontWeight: "900",
   },
   metricLabel: {
-    color: COLORS.muted,
-    fontSize: 12,
-    fontWeight: "800",
+    color: COLORS.textMuted,
+    fontSize: 11,
+    fontWeight: "600",
     marginTop: 4,
     textAlign: "center",
   },
   sectionHeader: {
-    marginTop: 26,
+    marginBottom: 16,
   },
   sectionTitle: {
-    color: COLORS.ink,
-    fontSize: 25,
-    fontWeight: "900",
+    color: COLORS.text,
+    fontSize: 24,
+    fontWeight: "800",
   },
   sectionSubtitle: {
-    color: COLORS.muted,
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 6,
+    color: COLORS.textMuted,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 4,
   },
   features: {
     gap: 12,
-    marginTop: 16,
+    marginBottom: 24,
   },
   featureCard: {
-    backgroundColor: COLORS.card,
-    borderColor: COLORS.line,
-    borderRadius: 24,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: 18,
     borderWidth: 1,
+    flexDirection: "row",
     padding: 16,
+    gap: 14,
+    alignItems: "center",
   },
   featureIcon: {
     alignItems: "center",
-    borderRadius: 17,
-    height: 46,
+    borderRadius: 14,
+    height: 48,
     justifyContent: "center",
-    marginBottom: 12,
-    width: 46,
+    width: 48,
+  },
+  featureTextContainer: {
+    flex: 1,
   },
   featureTitle: {
-    color: COLORS.ink,
-    fontSize: 18,
-    fontWeight: "900",
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "700",
   },
   featureText: {
-    color: COLORS.muted,
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: 5,
+    color: COLORS.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 3,
   },
   loginInfo: {
     alignItems: "center",
-    backgroundColor: "#EAF5FF",
-    borderColor: "#BBDDF6",
-    borderRadius: 22,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: 18,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 12,
-    marginTop: 16,
+    gap: 14,
     padding: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.accent,
   },
   loginInfoText: {
     flex: 1,
   },
   loginInfoTitle: {
-    color: COLORS.ink,
-    fontSize: 16,
-    fontWeight: "900",
+    color: COLORS.text,
+    fontSize: 15,
+    fontWeight: "700",
   },
   loginInfoBody: {
-    color: COLORS.blueDark,
-    fontSize: 14,
-    fontWeight: "800",
+    color: COLORS.accentLight,
+    fontSize: 13,
+    fontWeight: "600",
     marginTop: 3,
   },
 });

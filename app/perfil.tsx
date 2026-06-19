@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import {
   deleteUser,
   EmailAuthProvider,
@@ -31,6 +32,7 @@ import {
   View,
 } from "react-native";
 import { auth, db } from "../services/firebase";
+import { COLORS } from "@/constants/theme";
 
 export default function Perfil() {
   const [usuario, setUsuario] = useState<User | null>(null);
@@ -76,7 +78,7 @@ export default function Perfil() {
     if (!usuario) return;
 
     if (!nome.trim()) {
-      Alert.alert("Atencao", "Informe o nome do usuario.");
+      Alert.alert("Atenção", "Informe o nome do usuário.");
       return;
     }
 
@@ -105,11 +107,11 @@ export default function Perfil() {
 
   function confirmarExclusao() {
     if (!senhaConfirmacao.trim()) {
-      Alert.alert("Atencao", "Digite sua senha para confirmar a exclusao da conta.");
+      Alert.alert("Atenção", "Digite sua senha para confirmar a exclusão da conta.");
       return;
     }
 
-    Alert.alert("Excluir conta", "Essa acao apaga perfil, produtos e conta de acesso.", [
+    Alert.alert("Excluir conta", "Essa ação apagará perfil, insumos e sua conta de acesso permanentemente.", [
       { text: "Cancelar", style: "cancel" },
       { text: "Excluir", style: "destructive", onPress: excluirPerfil },
     ]);
@@ -137,7 +139,7 @@ export default function Perfil() {
       await deleteDoc(doc(db, "usuarios", user.uid));
       await deleteUser(user);
 
-      Alert.alert("Sucesso", "Conta excluida com sucesso.");
+      Alert.alert("Sucesso", "Conta excluída com sucesso.");
       router.replace("/login");
     } catch (error: any) {
       const mensagem =
@@ -154,61 +156,84 @@ export default function Perfil() {
   if (carregando) {
     return (
       <View style={styles.carregando}>
-        <ActivityIndicator color="#2563EB" size="large" />
+        <ActivityIndicator color={COLORS.accent} size="large" />
       </View>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.conteudo} keyboardShouldPersistTaps="handled">
-        <Text style={styles.titulo}>Perfil do Usuario</Text>
-        <Text style={styles.subtitulo}>Consulte, altere ou exclua seus dados cadastrados.</Text>
-
-        <Text style={styles.label}>Nome</Text>
-        <TextInput onChangeText={setNome} style={styles.input} value={nome} />
-
-        <Text style={styles.label}>Telefone</Text>
-        <TextInput
-          keyboardType="phone-pad"
-          onChangeText={setTelefone}
-          style={styles.input}
-          value={telefone}
-        />
-
-        <Text style={styles.label}>E-mail</Text>
-        <TextInput editable={false} style={[styles.input, styles.inputDesabilitado]} value={email} />
-
-        <TouchableOpacity
-          disabled={salvando}
-          onPress={salvarPerfil}
-          style={[styles.botaoPrimario, salvando && styles.botaoDesabilitado]}
-        >
-          <Text style={styles.textoBotao}>{salvando ? "SALVANDO..." : "SALVAR ALTERACOES"}</Text>
+      {/* Custom Header Bar */}
+      <View style={styles.topHeader}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons color={COLORS.text} name="arrow-back" size={24} />
         </TouchableOpacity>
+        <Text style={styles.headerTitle}>Configurações de Perfil</Text>
+        <View style={{ width: 44 }} />
+      </View>
 
-        <View style={styles.areaExclusao}>
-          <Text style={styles.label}>Senha para excluir a conta</Text>
-          <TextInput
-            onChangeText={setSenhaConfirmacao}
-            placeholder="Digite sua senha"
-            placeholderTextColor="#6B7280"
-            secureTextEntry
-            style={styles.input}
-            value={senhaConfirmacao}
-          />
+      <ScrollView contentContainerStyle={styles.conteudo} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+        <Text style={styles.subtitulo}>Gerencie as informações cadastrais da sua conta operacional.</Text>
+
+        <View style={styles.card}>
+          <Text style={styles.label}>Nome Completo</Text>
+          <View style={styles.inputWrap}>
+            <TextInput onChangeText={setNome} style={styles.input} value={nome} placeholderTextColor={COLORS.textMuted} />
+          </View>
+
+          <Text style={styles.label}>Telefone</Text>
+          <View style={styles.inputWrap}>
+            <TextInput
+              keyboardType="phone-pad"
+              onChangeText={setTelefone}
+              style={styles.input}
+              value={telefone}
+              placeholderTextColor={COLORS.textMuted}
+            />
+          </View>
+
+          <Text style={styles.label}>E-mail (Não editável)</Text>
+          <View style={[styles.inputWrap, styles.inputWrapDesabilitado]}>
+            <TextInput editable={false} style={[styles.input, styles.inputDesabilitado]} value={email} />
+          </View>
+
+          <TouchableOpacity
+            disabled={salvando}
+            onPress={salvarPerfil}
+            style={[styles.botaoPrimario, salvando && styles.botaoDesabilitado]}
+          >
+            <Text style={styles.textoBotao}>{salvando ? "SALVANDO..." : "SALVAR ALTERAÇÕES"}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Danger zone / Delete Account */}
+        <View style={[styles.card, styles.cardPerigo]}>
+          <Text style={styles.tituloPerigo}>Zona Crítica</Text>
+          <Text style={styles.subtituloPerigo}>Excluir sua conta removerá permanentemente todos os registros de produtos e insumos cadastrados.</Text>
+
+          <Text style={styles.label}>Senha para Confirmação</Text>
+          <View style={styles.inputWrap}>
+            <TextInput
+              onChangeText={setSenhaConfirmacao}
+              placeholder="Digite sua senha de acesso"
+              placeholderTextColor={COLORS.textMuted}
+              secureTextEntry
+              style={styles.input}
+              value={senhaConfirmacao}
+            />
+          </View>
 
           <TouchableOpacity
             disabled={excluindo}
             onPress={confirmarExclusao}
             style={[styles.botaoPerigo, excluindo && styles.botaoDesabilitado]}
           >
-            <Text style={styles.textoBotao}>{excluindo ? "EXCLUINDO..." : "EXCLUIR CONTA"}</Text>
+            <Text style={styles.textoBotao}>{excluindo ? "EXCLUINDO..." : "EXCLUIR MINHA CONTA"}</Text>
           </TouchableOpacity>
         </View>
 
         <TouchableOpacity onPress={() => router.back()} style={styles.botaoSecundario}>
-          <Text style={styles.textoSecundario}>VOLTAR</Text>
+          <Text style={styles.textoSecundario}>VOLTAR AO PAINEL</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -218,88 +243,155 @@ export default function Perfil() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.background,
   },
   carregando: {
     alignItems: "center",
-    backgroundColor: "#F8FAFC",
+    backgroundColor: COLORS.background,
     flex: 1,
     justifyContent: "center",
   },
   conteudo: {
     padding: 20,
+    paddingBottom: 40,
   },
   titulo: {
-    color: "#111827",
+    color: COLORS.text,
     fontSize: 28,
-    fontWeight: "800",
+    fontWeight: "900",
     marginTop: 8,
   },
   subtitulo: {
-    color: "#475569",
-    fontSize: 15,
-    lineHeight: 21,
-    marginBottom: 22,
+    color: COLORS.textMuted,
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 20,
     marginTop: 6,
   },
+  card: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 18,
+    marginBottom: 20,
+  },
   label: {
-    color: "#334155",
+    color: COLORS.text,
     fontSize: 14,
     fontWeight: "700",
     marginBottom: 6,
   },
-  input: {
-    backgroundColor: "#FFFFFF",
-    borderColor: "#CBD5E1",
-    borderRadius: 8,
+  inputWrap: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderColor: COLORS.border,
+    borderRadius: 12,
     borderWidth: 1,
-    color: "#111827",
-    fontSize: 16,
     marginBottom: 14,
-    padding: 14,
+    paddingHorizontal: 12,
+    minHeight: 48,
+    justifyContent: "center",
+  },
+  inputWrapDesabilitado: {
+    backgroundColor: "rgba(36, 40, 54, 0.5)",
+    borderColor: COLORS.border,
+  },
+  input: {
+    color: COLORS.text,
+    fontSize: 15,
+    minHeight: 46,
   },
   inputDesabilitado: {
-    backgroundColor: "#E5E7EB",
-    color: "#475569",
+    color: COLORS.textMuted,
   },
   botaoPrimario: {
     alignItems: "center",
-    backgroundColor: "#2563EB",
-    borderRadius: 8,
+    backgroundColor: COLORS.accent,
+    borderRadius: 12,
     marginTop: 8,
-    padding: 15,
+    padding: 14,
+    shadowColor: COLORS.accent,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
   },
   botaoDesabilitado: {
     opacity: 0.7,
   },
-  areaExclusao: {
-    borderTopColor: "#CBD5E1",
-    borderTopWidth: 1,
-    marginTop: 24,
-    paddingTop: 20,
+  cardPerigo: {
+    borderColor: COLORS.danger,
+    borderWidth: 1.5,
+    backgroundColor: "rgba(225, 112, 85, 0.05)",
+  },
+  tituloPerigo: {
+    color: COLORS.danger,
+    fontSize: 18,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  subtituloPerigo: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginBottom: 14,
   },
   botaoPerigo: {
     alignItems: "center",
-    backgroundColor: "#B91C1C",
-    borderRadius: 8,
-    padding: 15,
+    backgroundColor: COLORS.danger,
+    borderRadius: 12,
+    padding: 14,
+    shadowColor: COLORS.danger,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 3,
   },
   botaoSecundario: {
     alignItems: "center",
-    borderColor: "#94A3B8",
-    borderRadius: 8,
+    borderColor: COLORS.border,
+    borderRadius: 12,
     borderWidth: 1,
-    marginTop: 12,
-    padding: 15,
+    padding: 14,
+    marginTop: 8,
   },
   textoBotao: {
-    color: "#FFFFFF",
+    color: COLORS.white,
     fontSize: 15,
     fontWeight: "700",
   },
   textoSecundario: {
-    color: "#334155",
-    fontSize: 15,
+    color: COLORS.text,
+    fontSize: 14,
     fontWeight: "700",
+  },
+  topHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    backgroundColor: COLORS.surface,
+  },
+  backButton: {
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceAlt,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  headerTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "900",
   },
 });
