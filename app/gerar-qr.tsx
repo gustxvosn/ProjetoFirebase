@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -136,20 +137,20 @@ export default function GerarQrScreen() {
   const [gestorEmail, setGestorEmail] = useState("");
   const [nomeEquipamento, setNomeEquipamento] = useState("");
   const [historico, setHistorico] = useState<QrHistorico[]>([]);
+  const [qrGerado, setQrGerado] = useState<QrHistorico | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [excluindoId, setExcluindoId] = useState<string | null>(null);
   const [nomeFocused, setNomeFocused] = useState(false);
 
-  const codigoPreview = useMemo(() => criarCodigoQr(), []);
-  const historicoPorStatus = useMemo(
-    () =>
+  const qrGeradoUrl = qrGerado
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`SMARTWASH:${qrGerado.codigo}`)}`
+    : "";
+  const historicoPorStatus =
       STATUS_ORDEM.map((status) => ({
         title: status,
         data: historico.filter((item) => item.status === status),
-      })).filter((section) => section.data.length > 0),
-    [historico]
-  );
+      })).filter((section) => section.data.length > 0);
 
   useEffect(() => {
     let unsubscribeQrcodes: (() => void) | undefined;
@@ -208,7 +209,7 @@ export default function GerarQrScreen() {
     };
   }, []);
 
-  async function gerarSalvarImprimir() {
+  async function gerarQrCode() {
     if (!usuario || !gestorId) {
       Alert.alert("Atenção", "Entre com um gestor do Firebase para gerar QR codes.");
       return;
@@ -222,8 +223,7 @@ export default function GerarQrScreen() {
     try {
       setSalvando(true);
       const codigo = criarCodigoQr();
-
-      await addDoc(collection(db, "qrcodes"), {
+      const docRef = await addDoc(collection(db, "qrcodes"), {
         nome: nomeEquipamento.trim(),
         codigo,
         status: "Sujo",
@@ -237,16 +237,31 @@ export default function GerarQrScreen() {
         atualizadoEm: serverTimestamp(),
       });
 
-      await Print.printAsync({
-        html: montarHtmlEtiqueta(nomeEquipamento.trim(), codigo),
+      setQrGerado({
+        id: docRef.id,
+        nome: nomeEquipamento.trim(),
+        codigo,
+        status: "Sujo",
+        ultimoEvento: "QR code criado",
       });
-
       setNomeEquipamento("");
-      Alert.alert("Sucesso", "QR code salvo no Firebase e enviado para impressão.");
+      Alert.alert("Sucesso", "QR code gerado e salvo no Firebase.");
     } catch (error: any) {
       Alert.alert("Erro", error.message || "Não foi possível gerar o QR code.");
     } finally {
       setSalvando(false);
+    }
+  }
+
+  async function imprimirQrGerado() {
+    if (!qrGerado) return;
+
+    try {
+      await Print.printAsync({
+        html: montarHtmlEtiqueta(qrGerado.nome, qrGerado.codigo),
+      });
+    } catch (error: any) {
+      Alert.alert("Erro", error.message || "Não foi possível imprimir o QR code.");
     }
   }
 
@@ -290,11 +305,11 @@ export default function GerarQrScreen() {
               </View>
               <Text style={styles.title}>Novo QR Code</Text>
               <Text style={styles.subtitle}>
-                O QR code será salvo no Firebase e ficará disponível para a equipe deste gestor.
+                Informe um título e gere um QR code real vinculado ao Firebase.
               </Text>
 
               <View style={styles.inputWrap}>
-                <Text style={styles.label}>Nome do equipamento</Text>
+                <Text style={styles.label}>Título</Text>
                 <TextInput
                   onBlur={() => setNomeFocused(false)}
                   onChangeText={setNomeEquipamento}
@@ -306,25 +321,34 @@ export default function GerarQrScreen() {
                 />
               </View>
 
-              <View style={styles.previewBox}>
-                <Text style={styles.previewLabel}>Exemplo de código gerado</Text>
-                <Text style={styles.previewCode}>{codigoPreview}</Text>
-              </View>
-
               <Pressable
                 disabled={salvando}
-                onPress={gerarSalvarImprimir}
+                onPress={gerarQrCode}
                 style={[styles.button, salvando && styles.buttonDisabled]}
               >
                 {salvando ? (
                   <ActivityIndicator color={COLORS.white} />
                 ) : (
                   <>
-                    <Ionicons name="save-outline" size={20} color={COLORS.white} />
-                    <Text style={styles.buttonText}>Salvar e imprimir</Text>
+                    <Ionicons name="qr-code-outline" size={20} color={COLORS.white} />
+                    <Text style={styles.buttonText}>Gerar QR Code</Text>
                   </>
                 )}
               </Pressable>
+
+              {qrGerado ? (
+                <View style={styles.generatedQrBox}>
+                  <Text style={styles.generatedTitle}>{qrGerado.nome}</Text>
+                  <View style={styles.qrImageWrap}>
+                    <Image source={{ uri: qrGeradoUrl }} style={styles.qrImage} />
+                  </View>
+                  <Text style={styles.generatedCode}>{qrGerado.codigo}</Text>
+                  <Pressable onPress={imprimirQrGerado} style={styles.printButton}>
+                    <Ionicons name="print-outline" size={19} color={COLORS.white} />
+                    <Text style={styles.printButtonText}>Imprimir somente o QR Code</Text>
+                  </Pressable>
+                </View>
+              ) : null}
             </View>
 
             <Text style={styles.historyTitle}>Histórico de QR Codes</Text>
@@ -467,27 +491,57 @@ const styles = StyleSheet.create({
     borderColor: COLORS.accent,
     borderWidth: 2,
   },
-  previewBox: {
+  generatedQrBox: {
     alignItems: "center",
     backgroundColor: COLORS.surfaceAlt,
     borderColor: COLORS.border,
     borderRadius: 14,
     borderWidth: 1,
-    marginBottom: 16,
+    marginTop: 16,
     padding: 14,
     width: "100%",
   },
-  previewLabel: {
-    color: COLORS.textMuted,
-    fontSize: 12,
-    fontWeight: "700",
+  generatedTitle: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "900",
+    marginBottom: 12,
+    textAlign: "center",
   },
-  previewCode: {
+  qrImageWrap: {
+    alignItems: "center",
+    backgroundColor: COLORS.white,
+    borderRadius: 18,
+    justifyContent: "center",
+    padding: 12,
+  },
+  qrImage: {
+    height: 220,
+    width: 220,
+  },
+  generatedCode: {
     color: COLORS.accentLight,
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: "900",
     letterSpacing: 2,
-    marginTop: 4,
+    marginTop: 12,
+  },
+  printButton: {
+    alignItems: "center",
+    backgroundColor: COLORS.success,
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 14,
+    minHeight: 50,
+    paddingHorizontal: 16,
+    width: "100%",
+  },
+  printButtonText: {
+    color: COLORS.white,
+    fontSize: 15,
+    fontWeight: "900",
   },
   button: {
     alignItems: "center",

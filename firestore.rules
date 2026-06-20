@@ -14,6 +14,10 @@ service cloud.firestore {
       return signedIn() && userDoc().perfil == 'gestor';
     }
 
+    function isGlobalAdmin() {
+      return signedIn() && request.auth.token.email == 'admin@smartwash.local';
+    }
+
     function sameTeam(gestorId) {
       return signedIn()
         && (request.auth.uid == gestorId || userDoc().gestorId == gestorId);
@@ -70,7 +74,8 @@ service cloud.firestore {
     }
 
     match /qrcodes/{qrId} {
-      allow read: if sameTeam(resource.data.gestorId)
+      allow read: if isGlobalAdmin()
+        || sameTeam(resource.data.gestorId)
         || isWillViewerForEnrico(resource.data.gestorEmail);
 
       allow create: if isGestor()

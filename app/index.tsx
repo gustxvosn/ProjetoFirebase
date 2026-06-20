@@ -31,7 +31,6 @@ const FEATURES = [
 const STATS = [
   { value: "24/7", label: "monitoramento" },
   { value: "QR", label: "acesso rápido" },
-  { value: "CRUD", label: "dados no Firebase" },
 ];
 
 export default function Landing() {

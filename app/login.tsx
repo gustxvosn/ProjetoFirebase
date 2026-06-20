@@ -1,5 +1,8 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { sendEmailVerification, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
 import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -17,7 +20,12 @@ import {
   View,
 } from "react-native";
 import { auth, db } from "../services/firebase";
-import { isDemoCredentials, startDemoSession } from "../services/demoAuth";
+import {
+  ADMIN_AUTH_EMAIL,
+  ADMIN_AUTH_PASSWORD,
+  isDemoCredentials,
+  startDemoSession,
+} from "../services/demoAuth";
 import { COLORS } from "@/constants/theme";
 
 export default function Login() {
@@ -29,6 +37,40 @@ export default function Login() {
   const [emailFocused, setEmailFocused] = useState(false);
   const [senhaFocused, setSenhaFocused] = useState(false);
 
+  async function entrarComoAdmin() {
+    try {
+      let credencial;
+
+      try {
+        credencial = await signInWithEmailAndPassword(auth, ADMIN_AUTH_EMAIL, ADMIN_AUTH_PASSWORD);
+      } catch (error: any) {
+        if (error?.code !== "auth/user-not-found" && error?.code !== "auth/invalid-credential") {
+          throw error;
+        }
+
+        credencial = await createUserWithEmailAndPassword(auth, ADMIN_AUTH_EMAIL, ADMIN_AUTH_PASSWORD);
+      }
+
+      await setDoc(
+        doc(db, "usuarios", credencial.user.uid),
+        {
+          nome: "Enrico",
+          email: ADMIN_AUTH_EMAIL,
+          perfil: "admin",
+          adminGlobal: true,
+          emailVerificado: true,
+          atualizadoEm: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      startDemoSession("admin");
+      router.replace("/home");
+    } catch {
+      Alert.alert("Erro", "Não foi possível acessar o painel admin.");
+    }
+  }
+
   async function entrar() {
     if (!email.trim() || !senha.trim()) {
       Alert.alert("Atenção", "Informe e-mail e senha.");
@@ -39,40 +81,18 @@ export default function Login() {
       setCarregando(true);
 
       if (isDemoCredentials(email, senha)) {
-        startDemoSession(perfil);
-        router.replace("/home");
+        await entrarComoAdmin();
         return;
       }
 
-      const credencial = await signInWithEmailAndPassword(auth, email.trim(), senha);
-      await credencial.user.reload();
-
-      if (!credencial.user.emailVerified) {
-        try {
-          await sendEmailVerification(credencial.user);
-        } catch {
-          // O Firebase pode limitar reenvios. O bloqueio de acesso continua valendo.
-        }
-
-        await signOut(auth);
-        Alert.alert(
-          "Confirme seu e-mail",
-          "Enviamos um link de confirmação para o seu e-mail. Confirme antes de acessar o painel."
-        );
-        return;
-      }
-
-      await setDoc(
-        doc(db, "usuarios", credencial.user.uid),
-        {
-          emailVerificado: true,
-          atualizadoEm: serverTimestamp(),
-        },
-        { merge: true }
-      );
-
+      await signInWithEmailAndPassword(auth, email.trim(), senha);
       router.replace("/home");
-    } catch {
+    } catch (error: any) {
+      if (error?.code === "permission-denied" || error?.code === "firestore/permission-denied") {
+        Alert.alert("Acesso bloqueado", "O Firebase bloqueou a leitura do perfil deste usuário.");
+        return;
+      }
+
       Alert.alert("Dados inválidos", "Verifique o e-mail e a senha informados.");
     } finally {
       setCarregando(false);

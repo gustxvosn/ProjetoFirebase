@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { createUserWithEmailAndPassword, sendEmailVerification, signOut, updateProfile } from "firebase/auth";
+import { createUserWithEmailAndPassword, signOut, updateProfile } from "firebase/auth";
 import { doc, serverTimestamp, setDoc, getDoc, updateDoc } from "firebase/firestore";
 import { router } from "expo-router";
 import { useState } from "react";
@@ -112,7 +112,6 @@ export default function Cadastro() {
           nome: nome.trim(),
           telefone: telefone.trim(),
           email: email.trim(),
-          emailVerificado: false,
           perfil: perfilDaChave,
           gestorId: perfilDaChave === "gestor" ? credencial.user.uid : chaveData.gestorId,
           gestorEmail: perfilDaChave === "gestor" ? email.trim() : chaveData.gestorEmail,
@@ -132,14 +131,8 @@ export default function Cadastro() {
         return;
       }
 
-      setDiagnostico("Enviando e-mail de confirmação...");
-      await sendEmailVerification(credencial.user);
-
-      Alert.alert(
-        "Confirme seu e-mail",
-        "Cadastro criado. Enviamos um link de confirmação para o e-mail informado. Confirme o e-mail antes de entrar no sistema."
-      );
-      setDiagnostico("Cadastro salvo. Aguardando confirmação do e-mail para liberar o acesso.");
+      Alert.alert("Sucesso", "Usuário cadastrado com sucesso!");
+      setDiagnostico("Cadastro salvo no Authentication e no Firestore.");
       await signOut(auth);
       router.replace("/login");
     } catch (error: any) {

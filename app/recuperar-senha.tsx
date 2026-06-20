@@ -27,20 +27,6 @@ export default function RecuperarSenha() {
     texto: string;
   } | null>(null);
 
-  function getActionCodeSettings() {
-    const runtime = globalThis as typeof globalThis & {
-      location?: {
-        origin?: string;
-      };
-    };
-    const origin = runtime.location?.origin || "https://projetocrud-74bfc.firebaseapp.com";
-
-    return {
-      handleCodeInApp: false,
-      url: `${origin}/nova-senha`,
-    };
-  }
-
   async function resetarSenha() {
     if (!email.trim()) {
       setMensagem({
@@ -53,7 +39,7 @@ export default function RecuperarSenha() {
 
     try {
       setEnviando(true);
-      await sendPasswordResetEmail(auth, email.trim(), getActionCodeSettings());
+      await sendPasswordResetEmail(auth, email.trim());
       setMensagem({
         tipo: "sucesso",
         titulo: "E-mail enviado",
@@ -69,10 +55,16 @@ export default function RecuperarSenha() {
         return;
       }
 
+      const mensagens: Record<string, string> = {
+        "auth/user-not-found": "Não existe uma conta cadastrada com este e-mail.",
+        "auth/too-many-requests": "Muitas tentativas. Aguarde alguns minutos e tente novamente.",
+        "auth/unauthorized-continue-uri": "O domínio do link de recuperação não está autorizado no Firebase.",
+      };
+
       setMensagem({
-        tipo: "sucesso",
-        titulo: "E-mail enviado",
-        texto: "Se houver uma conta cadastrada para este e-mail, você receberá um link para alterar a senha.",
+        tipo: "erro",
+        titulo: "E-mail não enviado",
+        texto: mensagens[error?.code] || "O Firebase não conseguiu enviar o link. Verifique o e-mail e tente novamente.",
       });
     } finally {
       setEnviando(false);

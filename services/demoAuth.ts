@@ -1,5 +1,8 @@
 const DEMO_ROLE_KEY = "hygienic-pro-demo-role";
 
+export const ADMIN_AUTH_EMAIL = "admin@smartwash.local";
+export const ADMIN_AUTH_PASSWORD = "SmartWashAdmin1234!";
+
 let demoRoleActive: string | null = null;
 
 function browserStorage() {

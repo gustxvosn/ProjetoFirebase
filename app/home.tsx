@@ -22,6 +22,7 @@ import {
   getDemoName,
   isDemoActive,
   getDemoRole,
+  ADMIN_AUTH_EMAIL,
 } from "../services/demoAuth";
 import {
   addDoc,
@@ -165,8 +166,28 @@ export default function Home() {
     }),
     [maquinas]
   );
-  const podeVisualizarQrs = perfilUsuario === "gestor" || perfilUsuario === "funcionario" || visualizacaoSomente;
+  const usuarioGestorAtivo =
+    !visualizacaoSomente &&
+    (perfilUsuario === "gestor" || usuario?.email?.toLowerCase() === EMAIL_GESTOR_EXEMPLO);
+  const usuarioAdminAtivo = perfilUsuario === "admin";
+  const maquinasPorEquipe = useMemo(() => {
+    const grupos = new Map<string, Maquina[]>();
+
+    maquinas.forEach((maquina) => {
+      const chaveEquipe = maquina.gestorEmail || maquina.gestorId || "Equipe sem identificação";
+      const lista = grupos.get(chaveEquipe) || [];
+      lista.push(maquina);
+      grupos.set(chaveEquipe, lista);
+    });
+
+    return Array.from(grupos.entries()).map(([equipe, itens]) => ({
+      equipe,
+      itens: itens.sort((a, b) => a.nome.localeCompare(b.nome)),
+    }));
+  }, [maquinas]);
+  const podeVisualizarQrs = perfilUsuario === "admin" || perfilUsuario === "gestor" || perfilUsuario === "funcionario" || visualizacaoSomente;
   const podeAlterarQrs = !visualizacaoSomente && (perfilUsuario === "gestor" || perfilUsuario === "funcionario");
+  const podeGerarChaves = usuarioGestorAtivo || usuarioAdminAtivo;
 
   useEffect(() => {
     let unsubscribeQrcodes: (() => void) | undefined;
@@ -184,8 +205,42 @@ export default function Home() {
       setUsuario(user);
 
       if (demoIsActive) {
-        setPerfilUsuario(getDemoRole() || "cliente");
+        const demoRole = getDemoRole() || "cliente";
+        setPerfilUsuario(demoRole);
         setNomeExibicao(getDemoName());
+        setVisualizacaoSomente(true);
+        setEquipeId("");
+        setEquipeEmail("");
+
+        if (demoRole === "admin" && user?.email === ADMIN_AUTH_EMAIL) {
+          unsubscribeQrcodes?.();
+          unsubscribeQrcodes = onSnapshot(
+            query(collection(db, "qrcodes")),
+            (snapshot) => {
+              const lista = snapshot.docs
+                .map((item) => {
+                  const dados = item.data();
+                  return {
+                    id: item.id,
+                    nome: String(dados.nome || ""),
+                    qr: String(dados.codigo || ""),
+                    status: (dados.status || "Sujo") as StatusMaquina,
+                    tempo: String(dados.tempo || "Pendente"),
+                    ultimoCiclo: String(dados.ultimoEvento || "Sem histórico"),
+                    gestorId: String(dados.gestorId || ""),
+                    gestorEmail: String(dados.gestorEmail || "Equipe sem e-mail"),
+                  };
+                })
+                .sort((a, b) => (a.gestorEmail || "").localeCompare(b.gestorEmail || "") || a.nome.localeCompare(b.nome));
+
+              setMaquinas(lista);
+              setSelecionadaId((atual) => (atual && lista.some((item) => item.id === atual) ? atual : lista[0]?.id || null));
+            },
+            (error) => {
+              Alert.alert("Erro ao carregar QR codes", error.message);
+            }
+          );
+        }
       } else if (user) {
         try {
           const userDoc = await getDoc(doc(db, "usuarios", user.uid));
@@ -329,15 +384,23 @@ export default function Home() {
       return;
     }
 
-    if (!equipeId && !equipeEmail) {
+    if (!equipeId && !equipeEmail && perfilUsuario !== "admin") {
       Alert.alert("Atenção", "Não foi possível identificar sua equipe.");
       return;
     }
 
     try {
       setBuscandoCodigo(true);
-      const filtroEquipe = equipeId ? where("gestorId", "==", equipeId) : where("gestorEmail", "==", equipeEmail);
-      const snapshot = await getDocs(query(collection(db, "qrcodes"), where("codigo", "==", codigo), filtroEquipe));
+      const snapshot =
+        perfilUsuario === "admin"
+          ? await getDocs(query(collection(db, "qrcodes"), where("codigo", "==", codigo)))
+          : await getDocs(
+              query(
+                collection(db, "qrcodes"),
+                where("codigo", "==", codigo),
+                equipeId ? where("gestorId", "==", equipeId) : where("gestorEmail", "==", equipeEmail)
+              )
+            );
 
       if (snapshot.empty) {
         Alert.alert("QR code não encontrado", "Nenhum QR code desta equipe foi encontrado com esse código.");
@@ -360,13 +423,23 @@ export default function Home() {
   }
 
   async function gerarChaveAcesso() {
-    if (!usuario || !equipeId) {
+    if (!usuario) {
       Alert.alert("Atenção", "Entre com um usuário do Firebase para gerar chaves.");
+      return;
+    }
+
+    if (!podeGerarChaves) {
+      Alert.alert("Acesso restrito", "Apenas gestores e admin podem gerar chaves.");
       return;
     }
 
     if (novaChavePerfil === "gestor" && !adminSession) {
       Alert.alert("Acesso restrito", "Apenas o admin pode gerar chaves para gestores.");
+      return;
+    }
+
+    if (novaChavePerfil !== "gestor" && !equipeId && !usuarioAdminAtivo) {
+      Alert.alert("Atenção", "Selecione um gestor autenticado para gerar chaves de cliente ou funcionário.");
       return;
     }
 
@@ -383,8 +456,8 @@ export default function Home() {
       await setDoc(docRef, {
         chave: chave,
         perfil: novaChavePerfil,
-        gestorId: novaChavePerfil === "gestor" ? null : equipeId,
-        gestorEmail: novaChavePerfil === "gestor" ? null : equipeEmail,
+        gestorId: novaChavePerfil === "gestor" ? null : equipeId || null,
+        gestorEmail: novaChavePerfil === "gestor" ? null : equipeEmail || EMAIL_GESTOR_EXEMPLO,
         criadoPor: usuario.uid,
         criadoPorEmail: usuario.email,
         usada: false,
@@ -465,7 +538,7 @@ export default function Home() {
           </View>
         </View>
 
-        {perfilUsuario === "gestor" && (
+        {podeGerarChaves && (
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Gerar Chave de Acesso</Text>
@@ -486,8 +559,8 @@ export default function Home() {
                 >
                   <Text style={[styles.roleText, novaChavePerfil === "funcionario" && styles.roleTextActive]}>Funcionário</Text>
                 </Pressable>
-                
-                {adminSession ? (
+
+                {usuarioAdminAtivo ? (
                   <Pressable
                     style={[styles.roleButton, novaChavePerfil === "gestor" && styles.roleButtonActive]}
                     onPress={() => setNovaChavePerfil("gestor")}
@@ -605,26 +678,31 @@ export default function Home() {
 
               {listaQrsAberta ? (
                 <View style={styles.qrListBox}>
-                  {maquinas.length ? (
-                    maquinas.map((maquina) => (
-                      <Pressable
-                        key={maquina.id}
-                        onPress={() => selecionarQrPorLista(maquina)}
-                        style={({ pressed }) => [
-                          styles.qrListItem,
-                          maquina.id === selecionadaId && styles.qrListItemActive,
-                          pressed && styles.pressed,
-                        ]}
-                      >
-                        <View style={styles.qrListIcon}>
-                          <MaterialCommunityIcons color={COLORS.accentLight} name="qrcode" size={20} />
-                        </View>
-                        <View style={styles.qrListCopy}>
-                          <Text style={styles.qrListName}>{maquina.nome}</Text>
-                          <Text style={styles.qrListCode}>{maquina.qr}</Text>
-                        </View>
-                        <Ionicons color={COLORS.textMuted} name="chevron-forward" size={18} />
-                      </Pressable>
+                  {maquinasPorEquipe.length ? (
+                    maquinasPorEquipe.map((grupo) => (
+                      <View key={grupo.equipe} style={styles.qrTeamGroup}>
+                        <Text style={styles.qrTeamTitle}>Equipe: {grupo.equipe}</Text>
+                        {grupo.itens.map((maquina) => (
+                          <Pressable
+                            key={maquina.id}
+                            onPress={() => selecionarQrPorLista(maquina)}
+                            style={({ pressed }) => [
+                              styles.qrListItem,
+                              maquina.id === selecionadaId && styles.qrListItemActive,
+                              pressed && styles.pressed,
+                            ]}
+                          >
+                            <View style={styles.qrListIcon}>
+                              <MaterialCommunityIcons color={COLORS.accentLight} name="qrcode" size={20} />
+                            </View>
+                            <View style={styles.qrListCopy}>
+                              <Text style={styles.qrListName}>{maquina.nome}</Text>
+                              <Text style={styles.qrListCode}>{maquina.qr} · {maquina.status}</Text>
+                            </View>
+                            <Ionicons color={COLORS.textMuted} name="chevron-forward" size={18} />
+                          </Pressable>
+                        ))}
+                      </View>
                     ))
                   ) : (
                     <Text style={styles.qrListEmpty}>Nenhum QR code gerado para esta equipe.</Text>
@@ -1261,6 +1339,16 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 12,
     padding: 10,
+  },
+  qrTeamGroup: {
+    gap: 8,
+  },
+  qrTeamTitle: {
+    color: COLORS.accentLight,
+    fontSize: 13,
+    fontWeight: "900",
+    marginBottom: 2,
+    marginTop: 4,
   },
   qrListItem: {
     alignItems: "center",
