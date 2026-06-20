@@ -1,5 +1,6 @@
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { sendEmailVerification, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -15,7 +16,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { auth } from "../services/firebase";
+import { auth, db } from "../services/firebase";
 import { isDemoCredentials, startDemoSession } from "../services/demoAuth";
 import { COLORS } from "@/constants/theme";
 
@@ -37,16 +38,42 @@ export default function Login() {
     try {
       setCarregando(true);
 
-      if (isDemoCredentials(email, senha, perfil)) {
+      if (isDemoCredentials(email, senha)) {
         startDemoSession(perfil);
         router.replace("/home");
         return;
       }
 
-      await signInWithEmailAndPassword(auth, email.trim(), senha);
+      const credencial = await signInWithEmailAndPassword(auth, email.trim(), senha);
+      await credencial.user.reload();
+
+      if (!credencial.user.emailVerified) {
+        try {
+          await sendEmailVerification(credencial.user);
+        } catch {
+          // O Firebase pode limitar reenvios. O bloqueio de acesso continua valendo.
+        }
+
+        await signOut(auth);
+        Alert.alert(
+          "Confirme seu e-mail",
+          "Enviamos um link de confirmação para o seu e-mail. Confirme antes de acessar o painel."
+        );
+        return;
+      }
+
+      await setDoc(
+        doc(db, "usuarios", credencial.user.uid),
+        {
+          emailVerificado: true,
+          atualizadoEm: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
       router.replace("/home");
-    } catch (error: any) {
-      Alert.alert("Erro ao entrar", error.message);
+    } catch {
+      Alert.alert("Dados inválidos", "Verifique o e-mail e a senha informados.");
     } finally {
       setCarregando(false);
     }
@@ -73,9 +100,9 @@ export default function Login() {
           {/* Brand/Header block */}
           <View style={styles.brandBlock}>
             <View style={styles.logoMark}>
-              <MaterialCommunityIcons color={COLORS.white} name="shield-check" size={28} />
+              <MaterialCommunityIcons color={COLORS.white} name="washing-machine" size={28} />
             </View>
-            <Text style={styles.eyebrow}>HygienicPro</Text>
+            <Text style={styles.eyebrow}>Smart Wash</Text>
             <Text style={styles.title}>Controle sanitário inteligente.</Text>
             <Text style={styles.subtitle}>
               Acesse o painel para monitorar ciclos de higienização de equipamentos em tempo real.
@@ -91,8 +118,6 @@ export default function Login() {
                 <Text style={styles.secureText}>Seguro</Text>
               </View>
             </View>
-
-
 
             {/* Role Selector */}
             <Text style={styles.label}>Selecione seu perfil:</Text>
@@ -152,6 +177,13 @@ export default function Login() {
                 value={senha}
               />
             </View>
+
+            <Pressable
+              onPress={() => router.push("/recuperar-senha")}
+              style={({ pressed }) => [styles.forgotButton, pressed && styles.primaryButtonPressed]}
+            >
+              <Text style={styles.forgotText}>Esqueci minha senha</Text>
+            </Pressable>
 
             {/* Submit button */}
             <Pressable
@@ -260,7 +292,7 @@ const styles = StyleSheet.create({
   },
   secureBadge: {
     alignItems: "center",
-    backgroundColor: "rgba(108, 92, 231, 0.12)",
+    backgroundColor: "#24183D",
     borderRadius: 999,
     flexDirection: "row",
     gap: 6,
@@ -274,8 +306,8 @@ const styles = StyleSheet.create({
   },
   demoAccess: {
     alignItems: "center",
-    backgroundColor: "rgba(108, 92, 231, 0.08)",
-    borderColor: "rgba(108, 92, 231, 0.2)",
+    backgroundColor: "#171225",
+    borderColor: "#5B3EA6",
     borderRadius: 12,
     borderWidth: 1,
     flexDirection: "row",
@@ -304,6 +336,7 @@ const styles = StyleSheet.create({
   },
   inputWrapFocused: {
     borderColor: COLORS.accent,
+    borderWidth: 2,
     backgroundColor: `${COLORS.accent}05`,
   },
   input: {
@@ -342,6 +375,16 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontSize: 16,
     fontWeight: "700",
+  },
+  forgotButton: {
+    alignItems: "flex-end",
+    marginBottom: 8,
+    paddingVertical: 6,
+  },
+  forgotText: {
+    color: COLORS.accentLight,
+    fontSize: 14,
+    fontWeight: "800",
   },
   linkButton: {
     alignItems: "center",

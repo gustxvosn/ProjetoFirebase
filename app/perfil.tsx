@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   inputWrapDesabilitado: {
-    backgroundColor: "rgba(36, 40, 54, 0.5)",
+    backgroundColor: "#1E1A2B",
     borderColor: COLORS.border,
   },
   input: {
@@ -322,7 +322,7 @@ const styles = StyleSheet.create({
   cardPerigo: {
     borderColor: COLORS.danger,
     borderWidth: 1.5,
-    backgroundColor: "rgba(225, 112, 85, 0.05)",
+    backgroundColor: "#2A111A",
   },
   tituloPerigo: {
     color: COLORS.danger,

@@ -7,6 +7,7 @@ import {
   Alert,
   Animated,
   Pressable,
+  Platform,
   RefreshControl,
   SafeAreaView,
   ScrollView,
@@ -14,17 +15,27 @@ import {
   Text,
   TextInput,
   View,
-  Platform,
 } from "react-native";
-import { auth } from "../services/firebase";
+import { auth, db } from "../services/firebase";
 import {
   clearDemoSession,
   getDemoName,
   isDemoActive,
   getDemoRole,
 } from "../services/demoAuth";
-import { doc, getDoc, setDoc, serverTimestamp, collection } from "firebase/firestore";
-import { db } from "../services/firebase";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+} from "firebase/firestore";
 import { COLORS } from "@/constants/theme";
 
 type StatusMaquina = "Limpo" | "Sujo" | "Lavando";
@@ -36,36 +47,29 @@ type Maquina = {
   status: StatusMaquina;
   tempo: string;
   ultimoCiclo: string;
+  gestorId?: string;
+  gestorEmail?: string;
 };
 
-const HISTORICO = [42, 64, 48, 76, 58, 86, 69];
+const EMAIL_GESTOR_EXEMPLO = "enricomachado1@hotmail.com";
+const USUARIO_VISUALIZADOR_EXEMPLO = "Will Will";
 
-const MAQUINAS_INICIAIS: Maquina[] = [
-  {
-    id: "M-01",
-    nome: "Autoclave L-01",
-    qr: "QR-HYG-001",
-    status: "Lavando",
-    tempo: "18 min",
-    ultimoCiclo: "Hoje, 13:42",
-  },
-  {
-    id: "M-02",
-    nome: "Lavadora L-02",
-    qr: "QR-HYG-002",
-    status: "Limpo",
-    tempo: "Pronta",
-    ultimoCiclo: "Hoje, 12:10",
-  },
-  {
-    id: "M-03",
-    nome: "Secadora S-01",
-    qr: "QR-HYG-003",
-    status: "Sujo",
-    tempo: "Pendente",
-    ultimoCiclo: "Ontem, 18:05",
-  },
+const QRCODES_EXEMPLO = [
+  { nome: "Lavadora Industrial 01", qr: "SW-ENR-001", status: "Limpo" as StatusMaquina, tempo: "Pronta" },
+  { nome: "Secadora Profissional 02", qr: "SW-ENR-002", status: "Lavando" as StatusMaquina, tempo: "18 min" },
+  { nome: "Autoclave Central", qr: "SW-ENR-003", status: "Sujo" as StatusMaquina, tempo: "Pendente" },
 ];
+
+function criarCodigoChave() {
+  const alfabeto = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let codigo = "";
+
+  for (let index = 0; index < 8; index += 1) {
+    codigo += alfabeto[Math.floor(Math.random() * alfabeto.length)];
+  }
+
+  return codigo;
+}
 
 function statusConfig(status: StatusMaquina) {
   if (status === "Limpo") {
@@ -94,20 +98,55 @@ function statusConfig(status: StatusMaquina) {
   };
 }
 
+async function semearQrcodesExemplo(user: User, gestorId: string, gestorEmail: string) {
+  if (user.email?.toLowerCase() !== EMAIL_GESTOR_EXEMPLO) return;
+  if (gestorId !== user.uid) return;
+
+  const existentes = await getDocs(
+    query(collection(db, "qrcodes"), where("gestorId", "==", gestorId))
+  );
+
+  if (!existentes.empty) return;
+
+  await Promise.all(
+    QRCODES_EXEMPLO.map((item) =>
+      addDoc(collection(db, "qrcodes"), {
+        nome: item.nome,
+        codigo: item.qr,
+        status: item.status,
+        tempo: item.tempo,
+        ultimoEvento: "QR code inicial criado para demonstração",
+        gestorId,
+        gestorEmail,
+        criadoPor: user.uid,
+        criadoPorEmail: user.email,
+        criadoEm: serverTimestamp(),
+        atualizadoEm: serverTimestamp(),
+      })
+    )
+  );
+}
+
 export default function Home() {
   const [usuario, setUsuario] = useState<User | null>(null);
-  const [demoActive, setDemoActive] = useState(false);
   const [perfilUsuario, setPerfilUsuario] = useState<string>("cliente");
   const [nomeExibicao, setNomeExibicao] = useState<string>("");
+  const [equipeId, setEquipeId] = useState("");
+  const [equipeEmail, setEquipeEmail] = useState("");
+  const [adminSession, setAdminSession] = useState(false);
+  const [visualizacaoSomente, setVisualizacaoSomente] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [atualizando, setAtualizando] = useState(false);
-  const [maquinas, setMaquinas] = useState(MAQUINAS_INICIAIS);
-  const [selecionadaId, setSelecionadaId] = useState(MAQUINAS_INICIAIS[0].id);
+  const [maquinas, setMaquinas] = useState<Maquina[]>([]);
+  const [selecionadaId, setSelecionadaId] = useState<string | null>(null);
+  const [codigoBusca, setCodigoBusca] = useState("");
+  const [buscandoCodigo, setBuscandoCodigo] = useState(false);
+  const [codigoFocused, setCodigoFocused] = useState(false);
+  const [listaQrsAberta, setListaQrsAberta] = useState(false);
+  const [statusSalvando, setStatusSalvando] = useState<StatusMaquina | null>(null);
   
   // States para Geração de Chave (Gestor)
   const [novaChavePerfil, setNovaChavePerfil] = useState<string>("cliente");
-  const [senhaGestor, setSenhaGestor] = useState("");
-  const [senhaGestorFocused, setSenhaGestorFocused] = useState(false);
   const [chaveGerada, setChaveGerada] = useState<string | null>(null);
   const [gerandoChave, setGerandoChave] = useState(false);
 
@@ -126,11 +165,15 @@ export default function Home() {
     }),
     [maquinas]
   );
+  const podeVisualizarQrs = perfilUsuario === "gestor" || perfilUsuario === "funcionario" || visualizacaoSomente;
+  const podeAlterarQrs = !visualizacaoSomente && (perfilUsuario === "gestor" || perfilUsuario === "funcionario");
 
   useEffect(() => {
+    let unsubscribeQrcodes: (() => void) | undefined;
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       const demoIsActive = isDemoActive();
-      setDemoActive(demoIsActive);
+      setAdminSession(demoIsActive);
 
       if (!user && !demoIsActive) {
         setCarregando(false);
@@ -146,13 +189,60 @@ export default function Home() {
       } else if (user) {
         try {
           const userDoc = await getDoc(doc(db, "usuarios", user.uid));
+          let gestorDaEquipe = user.uid;
+          let emailDaEquipe = user.email || "";
+
           if (userDoc.exists()) {
-            setPerfilUsuario(userDoc.data()?.perfil || "cliente");
-            setNomeExibicao(userDoc.data()?.nome || user.email);
+            const dados = userDoc.data();
+            const perfil = dados?.perfil || "cliente";
+            const nomeUsuario = String(dados?.nome || user.email || "");
+            const usuarioVisualizador = nomeUsuario.trim().toLowerCase() === USUARIO_VISUALIZADOR_EXEMPLO.toLowerCase();
+            gestorDaEquipe = usuarioVisualizador ? "" : dados?.gestorId || user.uid;
+            emailDaEquipe = usuarioVisualizador ? EMAIL_GESTOR_EXEMPLO : dados?.gestorEmail || user.email || "";
+            setPerfilUsuario(perfil);
+            setNomeExibicao(nomeUsuario);
+            setVisualizacaoSomente(usuarioVisualizador);
           } else {
             setPerfilUsuario("cliente");
             setNomeExibicao(user.email || "Usuário");
+            setVisualizacaoSomente(false);
           }
+
+          setEquipeId(gestorDaEquipe);
+          setEquipeEmail(emailDaEquipe);
+          await semearQrcodesExemplo(user, gestorDaEquipe, emailDaEquipe);
+
+          unsubscribeQrcodes?.();
+          const qrcodesQuery = gestorDaEquipe
+            ? query(collection(db, "qrcodes"), where("gestorId", "==", gestorDaEquipe))
+            : query(collection(db, "qrcodes"), where("gestorEmail", "==", emailDaEquipe));
+
+          unsubscribeQrcodes = onSnapshot(
+            qrcodesQuery,
+            (snapshot) => {
+              const lista = snapshot.docs
+                .map((item) => {
+                  const dados = item.data();
+                  return {
+                    id: item.id,
+                    nome: String(dados.nome || ""),
+                    qr: String(dados.codigo || ""),
+                    status: (dados.status || "Sujo") as StatusMaquina,
+                    tempo: String(dados.tempo || "Pendente"),
+                    ultimoCiclo: String(dados.ultimoEvento || "Sem histórico"),
+                    gestorId: String(dados.gestorId || ""),
+                    gestorEmail: String(dados.gestorEmail || ""),
+                  };
+                })
+                .sort((a, b) => a.nome.localeCompare(b.nome));
+
+              setMaquinas(lista);
+              setSelecionadaId((atual) => (atual && lista.some((item) => item.id === atual) ? atual : lista[0]?.id || null));
+            },
+            (error) => {
+              Alert.alert("Erro ao carregar QR codes", error.message);
+            }
+          );
         } catch (error) {
           console.error("Erro ao buscar perfil", error);
         }
@@ -160,7 +250,10 @@ export default function Home() {
       setCarregando(false);
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribeQrcodes?.();
+      unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -186,6 +279,7 @@ export default function Home() {
   async function sair() {
     try {
       clearDemoSession();
+      setAdminSession(false);
       if (auth.currentUser) {
         await signOut(auth);
       }
@@ -195,32 +289,28 @@ export default function Home() {
     }
   }
 
-  function atualizarStatus(status: StatusMaquina) {
+  async function atualizarStatus(status: StatusMaquina) {
+    if (!selecionada) return;
+
     const statusLabels = {
       Limpo: "Higienizado",
       Sujo: "Pendente",
       Lavando: "Em Processo"
     };
-    Alert.alert("Alterar Status", `Marcar ${selecionada.nome} como ${statusLabels[status]}?`, [
-      { text: "Cancelar", style: "cancel" },
-      {
-        text: "Confirmar",
-        onPress: () => {
-          setMaquinas((lista) =>
-            lista.map((maquina) =>
-              maquina.id === selecionada.id
-                ? {
-                    ...maquina,
-                    status,
-                    tempo: status === "Lavando" ? "18 min" : status === "Limpo" ? "Pronta" : "Pendente",
-                    ultimoCiclo: "Agora",
-                  }
-                : maquina
-              )
-          );
-        },
-      },
-    ]);
+
+    try {
+      setStatusSalvando(status);
+      await updateDoc(doc(db, "qrcodes", selecionada.id), {
+        status,
+        tempo: status === "Lavando" ? "18 min" : status === "Limpo" ? "Pronta" : "Pendente",
+        ultimoEvento: `Status alterado para ${statusLabels[status]}`,
+        atualizadoEm: serverTimestamp(),
+      });
+    } catch (error: any) {
+      Alert.alert("Erro", error.message || "Não foi possível atualizar o QR code.");
+    } finally {
+      setStatusSalvando(null);
+    }
   }
 
   function simularLeituraQr() {
@@ -231,28 +321,84 @@ export default function Home() {
     router.push("/gerar-qr");
   }
 
-  async function gerarChaveAcesso() {
-    if (senhaGestor !== "1234") {
-      Alert.alert("Erro de Segurança", "Senha de administrador incorreta.");
+  async function buscarQrPorCodigo() {
+    const codigo = codigoBusca.trim().toUpperCase();
+
+    if (!codigo) {
+      Alert.alert("Atenção", "Digite o código do QR code.");
       return;
     }
-    
+
+    if (!equipeId && !equipeEmail) {
+      Alert.alert("Atenção", "Não foi possível identificar sua equipe.");
+      return;
+    }
+
+    try {
+      setBuscandoCodigo(true);
+      const filtroEquipe = equipeId ? where("gestorId", "==", equipeId) : where("gestorEmail", "==", equipeEmail);
+      const snapshot = await getDocs(query(collection(db, "qrcodes"), where("codigo", "==", codigo), filtroEquipe));
+
+      if (snapshot.empty) {
+        Alert.alert("QR code não encontrado", "Nenhum QR code desta equipe foi encontrado com esse código.");
+        return;
+      }
+
+      setSelecionadaId(snapshot.docs[0].id);
+      Alert.alert("QR code encontrado", "O equipamento foi carregado no painel.");
+    } catch (error: any) {
+      Alert.alert("Erro", error.message || "Não foi possível buscar o QR code.");
+    } finally {
+      setBuscandoCodigo(false);
+    }
+  }
+
+  function selecionarQrPorLista(maquina: Maquina) {
+    setSelecionadaId(maquina.id);
+    setCodigoBusca(maquina.qr);
+    setListaQrsAberta(false);
+  }
+
+  async function gerarChaveAcesso() {
+    if (!usuario || !equipeId) {
+      Alert.alert("Atenção", "Entre com um usuário do Firebase para gerar chaves.");
+      return;
+    }
+
+    if (novaChavePerfil === "gestor" && !adminSession) {
+      Alert.alert("Acesso restrito", "Apenas o admin pode gerar chaves para gestores.");
+      return;
+    }
+
     try {
       setGerandoChave(true);
-      const chave = Math.random().toString(36).substring(2, 8).toUpperCase();
-      const docRef = doc(collection(db, "chaves_cadastro"), chave);
+      let chave = criarCodigoChave();
+      let docRef = doc(collection(db, "chaves_cadastro"), chave);
+
+      while ((await getDoc(docRef)).exists()) {
+        chave = criarCodigoChave();
+        docRef = doc(collection(db, "chaves_cadastro"), chave);
+      }
       
       await setDoc(docRef, {
         chave: chave,
         perfil: novaChavePerfil,
+        gestorId: novaChavePerfil === "gestor" ? null : equipeId,
+        gestorEmail: novaChavePerfil === "gestor" ? null : equipeEmail,
+        criadoPor: usuario.uid,
+        criadoPorEmail: usuario.email,
         usada: false,
         criadoEm: serverTimestamp()
       });
       
       setChaveGerada(chave);
-      setSenhaGestor("");
     } catch (e: any) {
-      Alert.alert("Erro", "Não foi possível gerar a chave de acesso.");
+      const mensagem =
+        e?.code === "permission-denied" || e?.code === "firestore/permission-denied"
+          ? "O Firestore bloqueou a geração. Publique as regras atualizadas e tente novamente."
+          : "Não foi possível gerar a chave de acesso.";
+
+      Alert.alert("Erro", mensagem);
       console.error(e);
     } finally {
       setGerandoChave(false);
@@ -272,7 +418,7 @@ export default function Home() {
     );
   }
 
-  const status = statusConfig(selecionada.status);
+  const status = statusConfig(selecionada?.status || "Sujo");
   const bubbleTranslate = bubble.interpolate({
     inputRange: [0, 1],
     outputRange: [14, -14],
@@ -299,10 +445,10 @@ export default function Home() {
         {/* Welcome Header */}
         <View style={styles.header}>
           <View style={styles.headerTitleWrap}>
-            <Text style={styles.eyebrow}>HygienicPro</Text>
+            <Text style={styles.eyebrow}>Smart Wash</Text>
             <Text style={styles.title}>Dashboard</Text>
             <Text style={styles.subtitle} numberOfLines={1}>
-              Olá, {nomeExibicao}. Perfil: {perfilUsuario}
+              Olá, {nomeExibicao}.
             </Text>
           </View>
 
@@ -341,24 +487,15 @@ export default function Home() {
                   <Text style={[styles.roleText, novaChavePerfil === "funcionario" && styles.roleTextActive]}>Funcionário</Text>
                 </Pressable>
                 
-                <Pressable 
-                  style={[styles.roleButton, novaChavePerfil === "gestor" && styles.roleButtonActive]}
-                  onPress={() => setNovaChavePerfil("gestor")}
-                >
-                  <Text style={[styles.roleText, novaChavePerfil === "gestor" && styles.roleTextActive]}>Gestor</Text>
-                </Pressable>
+                {adminSession ? (
+                  <Pressable
+                    style={[styles.roleButton, novaChavePerfil === "gestor" && styles.roleButtonActive]}
+                    onPress={() => setNovaChavePerfil("gestor")}
+                  >
+                    <Text style={[styles.roleText, novaChavePerfil === "gestor" && styles.roleTextActive]}>Gestor</Text>
+                  </Pressable>
+                ) : null}
               </View>
-
-              <TextInput
-                style={[styles.inputGestor, senhaGestorFocused && styles.inputGestorFocused]}
-                placeholder="Senha do Gestor (1234)"
-                placeholderTextColor={COLORS.textMuted}
-                secureTextEntry
-                value={senhaGestor}
-                onChangeText={setSenhaGestor}
-                onFocus={() => setSenhaGestorFocused(true)}
-                onBlur={() => setSenhaGestorFocused(false)}
-              />
 
               <Pressable 
                 style={[styles.generateButton, gerandoChave && styles.pressed]} 
@@ -383,29 +520,7 @@ export default function Home() {
           </View>
         )}
 
-        {perfilUsuario === "gestor" && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Controle Financeiro</Text>
-            </View>
-            <View style={styles.financeCard}>
-              <View style={styles.financeItem}>
-                <Text style={styles.financeLabel}>Receita Diária</Text>
-                <Text style={styles.financeValuePositive}>R$ 1.250,00</Text>
-              </View>
-              <View style={styles.financeItem}>
-                <Text style={styles.financeLabel}>Despesas</Text>
-                <Text style={styles.financeValueNegative}>R$ 430,00</Text>
-              </View>
-              <View style={styles.financeItem}>
-                <Text style={styles.financeLabel}>Lucro Líquido</Text>
-                <Text style={styles.financeValueNeutral}>R$ 820,00</Text>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {(perfilUsuario === "gestor" || perfilUsuario === "funcionario") && (
+        {podeVisualizarQrs && (
           <>
             {/* Summary Counter Grid */}
             <View style={styles.summaryRow}>
@@ -427,24 +542,115 @@ export default function Home() {
             </View>
 
             <View style={styles.actionGrid}>
-              <Pressable onPress={simularLeituraQr} style={({ pressed }) => [styles.actionGridCard, pressed && styles.pressed]}>
-                <View style={styles.qrMark}>
-                  <MaterialCommunityIcons color={COLORS.white} name="qrcode-scan" size={24} />
-                </View>
-                <Text style={styles.actionGridTitle}>Escanear QR</Text>
+              {!visualizacaoSomente ? (
+                <Pressable onPress={simularLeituraQr} style={({ pressed }) => [styles.actionGridCard, pressed && styles.pressed]}>
+                  <View style={styles.qrMark}>
+                    <MaterialCommunityIcons color={COLORS.white} name="qrcode-scan" size={24} />
+                  </View>
+                  <Text style={styles.actionGridTitle}>Escanear QR</Text>
+                </Pressable>
+              ) : null}
+
+              {perfilUsuario === "gestor" && !visualizacaoSomente ? (
+                <Pressable onPress={gerarQrCode} style={({ pressed }) => [styles.actionGridCard, pressed && styles.pressed]}>
+                  <View style={[styles.qrMark, { backgroundColor: COLORS.surfaceAlt, borderWidth: 1, borderColor: COLORS.border }]}>
+                    <MaterialCommunityIcons color={COLORS.accent} name="qrcode-plus" size={24} />
+                  </View>
+                  <Text style={[styles.actionGridTitle, { color: COLORS.accent }]}>Gerar QR</Text>
+                </Pressable>
+              ) : null}
+            </View>
+
+            <View style={styles.searchCard}>
+              <Text style={styles.searchTitle}>Buscar QR por código</Text>
+              <Text style={styles.searchSubtitle}>Digite o código impresso na etiqueta para carregar o equipamento.</Text>
+              <View style={[styles.searchInputWrap, codigoFocused && styles.searchInputFocused]}>
+                <Ionicons color={codigoFocused ? COLORS.accent : COLORS.textMuted} name="search" size={19} />
+                <TextInput
+                  autoCapitalize="characters"
+                  onBlur={() => setCodigoFocused(false)}
+                  onChangeText={setCodigoBusca}
+                  onFocus={() => setCodigoFocused(true)}
+                  placeholder="Ex: SW-ENR-001"
+                  placeholderTextColor={COLORS.textMuted}
+                  style={styles.searchInput}
+                  value={codigoBusca}
+                />
+              </View>
+              <Pressable
+                disabled={buscandoCodigo}
+                onPress={() => setListaQrsAberta((aberta) => !aberta)}
+                style={({ pressed }) => [styles.searchButton, pressed && !buscandoCodigo && styles.pressed]}
+              >
+                {buscandoCodigo ? (
+                  <ActivityIndicator color={COLORS.white} />
+                ) : (
+                  <>
+                    <Ionicons color={COLORS.white} name={listaQrsAberta ? "chevron-up" : "list"} size={18} />
+                    <Text style={styles.searchButtonText}>Puxar QR code</Text>
+                  </>
+                )}
               </Pressable>
 
-              <Pressable onPress={gerarQrCode} style={({ pressed }) => [styles.actionGridCard, pressed && styles.pressed]}>
-                <View style={[styles.qrMark, { backgroundColor: COLORS.surfaceAlt, borderWidth: 1, borderColor: COLORS.border }]}>
-                  <MaterialCommunityIcons color={COLORS.accent} name="qrcode-plus" size={24} />
+              {codigoBusca.trim() ? (
+                <Pressable
+                  disabled={buscandoCodigo}
+                  onPress={buscarQrPorCodigo}
+                  style={({ pressed }) => [styles.searchSecondaryButton, pressed && !buscandoCodigo && styles.pressed]}
+                >
+                  <Ionicons color={COLORS.accentLight} name="search" size={17} />
+                  <Text style={styles.searchSecondaryText}>Buscar código digitado</Text>
+                </Pressable>
+              ) : null}
+
+              {listaQrsAberta ? (
+                <View style={styles.qrListBox}>
+                  {maquinas.length ? (
+                    maquinas.map((maquina) => (
+                      <Pressable
+                        key={maquina.id}
+                        onPress={() => selecionarQrPorLista(maquina)}
+                        style={({ pressed }) => [
+                          styles.qrListItem,
+                          maquina.id === selecionadaId && styles.qrListItemActive,
+                          pressed && styles.pressed,
+                        ]}
+                      >
+                        <View style={styles.qrListIcon}>
+                          <MaterialCommunityIcons color={COLORS.accentLight} name="qrcode" size={20} />
+                        </View>
+                        <View style={styles.qrListCopy}>
+                          <Text style={styles.qrListName}>{maquina.nome}</Text>
+                          <Text style={styles.qrListCode}>{maquina.qr}</Text>
+                        </View>
+                        <Ionicons color={COLORS.textMuted} name="chevron-forward" size={18} />
+                      </Pressable>
+                    ))
+                  ) : (
+                    <Text style={styles.qrListEmpty}>Nenhum QR code gerado para esta equipe.</Text>
+                  )}
                 </View>
-                <Text style={[styles.actionGridTitle, { color: COLORS.accent }]}>Gerar QR</Text>
-              </Pressable>
+              ) : null}
             </View>
           </>
         )}
 
-        {/* Selected Machine Detail Card */}
+        {!selecionada ? (
+          <View style={styles.machineCard}>
+            <View style={styles.emptyState}>
+              <MaterialCommunityIcons color={COLORS.accentLight} name="qrcode-scan" size={42} />
+              <Text style={styles.emptyTitle}>Nenhum QR code cadastrado</Text>
+              <Text style={styles.emptyText}>
+                Gere o primeiro QR code para começar a acompanhar os equipamentos desta equipe.
+              </Text>
+               {perfilUsuario === "gestor" && !visualizacaoSomente ? (
+                <Pressable onPress={gerarQrCode} style={styles.emptyButton}>
+                  <Text style={styles.emptyButtonText}>Gerar QR code</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        ) : (
         <View style={styles.machineCard}>
           <View style={styles.machineTop}>
             <View>
@@ -491,7 +697,7 @@ export default function Home() {
           </View>
 
           {/* Action Row to change Status - Only for gestor and funcionario */}
-          {(perfilUsuario === "gestor" || perfilUsuario === "funcionario") && (
+          {podeAlterarQrs ? (
             <View style={styles.actionRow}>
               {(["Limpo", "Sujo", "Lavando"] as StatusMaquina[]).map((item) => {
                 const itemConfig = statusConfig(item);
@@ -499,44 +705,37 @@ export default function Home() {
 
                 return (
                   <Pressable
+                    disabled={statusSalvando !== null}
                     key={item}
                     onPress={() => atualizarStatus(item)}
                     style={({ pressed }) => [
                       styles.actionButton,
                       active && { backgroundColor: `${itemConfig.color}15`, borderColor: itemConfig.color },
+                      statusSalvando === item && styles.actionButtonSaving,
                       pressed && styles.pressed,
                     ]}
                   >
-                    {item === "Lavando" ? (
+                    {statusSalvando === item ? (
+                      <ActivityIndicator color={itemConfig.color} size="small" />
+                    ) : item === "Lavando" ? (
                       <MaterialCommunityIcons color={itemConfig.color} name="cached" size={18} />
                     ) : (
                       <Ionicons color={itemConfig.color} name={itemConfig.icon} size={18} />
                     )}
                     <Text style={[styles.actionText, active && { color: itemConfig.color }]}>
-                      {item === "Limpo" ? "Limpo" : item === "Sujo" ? "Sujo" : "Processar"}
+                      {statusSalvando === item ? "Salvando..." : item === "Limpo" ? "Limpo" : item === "Sujo" ? "Sujo" : "Processar"}
                     </Text>
                   </Pressable>
                 );
               })}
             </View>
+          ) : (
+            <View style={styles.readOnlyBox}>
+              <Ionicons color={COLORS.accentLight} name="eye-outline" size={18} />
+              <Text style={styles.readOnlyText}>Visualização apenas: este usuário acompanha os QR codes, sem alterar estados.</Text>
+            </View>
           )}
         </View>
-
-        {/* Analytics Section - Only Gestor */}
-        {perfilUsuario === "gestor" && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Histórico de Ciclos</Text>
-              <Text style={styles.sectionMeta}>Últimos 7 dias</Text>
-            </View>
-            <View style={styles.chart}>
-              {HISTORICO.map((valor, index) => (
-                <View key={`${valor}-${index}`} style={styles.chartColumn}>
-                  <View style={[styles.chartBar, { height: valor }]} />
-                </View>
-              ))}
-            </View>
-          </View>
         )}
 
         {/* Notification card - All users */}
@@ -548,13 +747,13 @@ export default function Home() {
             <View style={styles.notificationCopy}>
               <Text style={styles.notificationTitle}>Alertas Push Ativos</Text>
               <Text style={styles.notificationText}>
-                Você receberá um aviso operacional assim que o ciclo de {selecionada.nome} for concluído.
+                Você receberá um aviso operacional assim que um ciclo de equipamento for concluído.
               </Text>
             </View>
           </View>
         </View>
 
-        <Text style={styles.lastUpdate}>Última atualização: {selecionada.ultimoCiclo}</Text>
+        {selecionada ? <Text style={styles.lastUpdate}>Última atualização: {selecionada.ultimoCiclo}</Text> : null}
       </ScrollView>
     </SafeAreaView>
   );
@@ -625,8 +824,8 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     alignItems: "center",
-    backgroundColor: "rgba(225, 112, 85, 0.08)",
-    borderColor: "rgba(225, 112, 85, 0.2)",
+    backgroundColor: "#2A111A",
+    borderColor: "#7F1D3A",
     borderRadius: 14,
     borderWidth: 1,
     height: 44,
@@ -668,8 +867,8 @@ const styles = StyleSheet.create({
   },
   scanCard: {
     alignItems: "center",
-    backgroundColor: "rgba(108, 92, 231, 0.1)",
-    borderColor: "rgba(108, 92, 231, 0.2)",
+    backgroundColor: "#171225",
+    borderColor: "#5B3EA6",
     borderRadius: 20,
     borderWidth: 1,
     flexDirection: "row",
@@ -719,6 +918,35 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 5,
   },
+  emptyState: {
+    alignItems: "center",
+    paddingVertical: 18,
+  },
+  emptyTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "900",
+    marginTop: 12,
+  },
+  emptyText: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 6,
+    textAlign: "center",
+  },
+  emptyButton: {
+    backgroundColor: COLORS.accent,
+    borderRadius: 12,
+    marginTop: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  emptyButtonText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: "800",
+  },
   machineTop: {
     alignItems: "flex-start",
     flexDirection: "row",
@@ -764,7 +992,7 @@ const styles = StyleSheet.create({
     width: 96,
   },
   bubble: {
-    backgroundColor: "rgba(108, 92, 231, 0.2)",
+    backgroundColor: "#3B2A66",
     position: "absolute",
   },
   bubbleOne: {
@@ -820,10 +1048,31 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 8,
   },
+  actionButtonSaving: {
+    opacity: 0.75,
+  },
   actionText: {
     color: COLORS.text,
     fontSize: 12,
     fontWeight: "800",
+  },
+  readOnlyBox: {
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceAlt,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+    padding: 12,
+  },
+  readOnlyText: {
+    color: COLORS.textMuted,
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "700",
+    lineHeight: 18,
   },
   section: {
     backgroundColor: COLORS.surface,
@@ -880,7 +1129,7 @@ const styles = StyleSheet.create({
   },
   notificationIcon: {
     alignItems: "center",
-    backgroundColor: "rgba(108, 92, 231, 0.1)",
+    backgroundColor: "#24183D",
     borderRadius: 14,
     height: 40,
     justifyContent: "center",
@@ -914,8 +1163,8 @@ const styles = StyleSheet.create({
   },
   actionGridCard: {
     alignItems: "center",
-    backgroundColor: "rgba(108, 92, 231, 0.1)",
-    borderColor: "rgba(108, 92, 231, 0.2)",
+    backgroundColor: "#171225",
+    borderColor: "#5B3EA6",
     borderRadius: 20,
     borderWidth: 1,
     flex: 1,
@@ -926,6 +1175,134 @@ const styles = StyleSheet.create({
     color: COLORS.text,
     fontSize: 14,
     fontWeight: "800",
+  },
+  searchCard: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginBottom: 16,
+    padding: 16,
+  },
+  searchTitle: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  searchSubtitle: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  searchInputWrap: {
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceAlt,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    marginTop: 12,
+    minHeight: 50,
+    paddingHorizontal: 14,
+  },
+  searchInputFocused: {
+    backgroundColor: `${COLORS.accent}05`,
+    borderColor: COLORS.accent,
+    borderWidth: 2,
+  },
+  searchInput: {
+    color: COLORS.text,
+    flex: 1,
+    fontSize: 15,
+    minHeight: 48,
+    ...Platform.select({
+      web: { outlineStyle: "none" },
+    }),
+  },
+  searchButton: {
+    alignItems: "center",
+    backgroundColor: COLORS.accent,
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 12,
+    minHeight: 48,
+    paddingHorizontal: 14,
+  },
+  searchButtonText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  searchSecondaryButton: {
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceAlt,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 10,
+    minHeight: 44,
+  },
+  searchSecondaryText: {
+    color: COLORS.accentLight,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  qrListBox: {
+    borderColor: COLORS.border,
+    borderRadius: 16,
+    borderWidth: 1,
+    gap: 8,
+    marginTop: 12,
+    padding: 10,
+  },
+  qrListItem: {
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceAlt,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    padding: 12,
+  },
+  qrListItemActive: {
+    borderColor: COLORS.accent,
+    borderWidth: 2,
+  },
+  qrListIcon: {
+    alignItems: "center",
+    backgroundColor: "#171225",
+    borderRadius: 12,
+    height: 38,
+    justifyContent: "center",
+    width: 38,
+  },
+  qrListCopy: {
+    flex: 1,
+  },
+  qrListName: {
+    color: COLORS.text,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+  qrListCode: {
+    color: COLORS.accentLight,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  qrListEmpty: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    padding: 10,
+    textAlign: "center",
   },
   financeCard: {
     flexDirection: "row",
@@ -1000,24 +1377,6 @@ const styles = StyleSheet.create({
   roleTextActive: {
     color: COLORS.white,
   },
-  inputGestor: {
-    backgroundColor: COLORS.surfaceAlt,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    height: 48,
-    fontSize: 14,
-    color: COLORS.text,
-    marginBottom: 16,
-    ...Platform.select({
-      web: { outlineStyle: "none" },
-    }),
-  },
-  inputGestorFocused: {
-    borderColor: COLORS.accent,
-    backgroundColor: `${COLORS.accent}05`,
-  },
   generateButton: {
     alignItems: "center",
     justifyContent: "center",
@@ -1037,7 +1396,7 @@ const styles = StyleSheet.create({
   },
   generatedKeyBox: {
     marginTop: 16,
-    backgroundColor: "rgba(108, 92, 231, 0.1)",
+    backgroundColor: "#24183D",
     borderWidth: 1,
     borderColor: COLORS.accent,
     borderRadius: 12,

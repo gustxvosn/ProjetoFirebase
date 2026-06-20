@@ -14,9 +14,9 @@ function browserStorage() {
   return runtime.localStorage;
 }
 
-export function isDemoCredentials(email: string, password: string, role: string) {
+export function isDemoCredentials(email: string, password: string) {
   const normalizedEmail = email.trim().toLowerCase();
-  return normalizedEmail === "demo" && password === "1234";
+  return normalizedEmail === "admin" && password === "1234";
 }
 
 export function startDemoSession(role: string) {
@@ -38,9 +38,5 @@ export function isDemoActive() {
 }
 
 export function getDemoName() {
-  const role = getDemoRole();
-  if (role === "gestor") return "Gestor (Demo)";
-  if (role === "funcionario") return "Funcionário (Demo)";
-  if (role === "cliente") return "Cliente (Demo)";
-  return "Usuário (Demo)";
+  return "Enrico";
 }

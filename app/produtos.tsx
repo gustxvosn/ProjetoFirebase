@@ -487,8 +487,8 @@ const styles = StyleSheet.create({
   },
   botaoEditar: {
     alignItems: "center",
-    backgroundColor: "rgba(108, 92, 231, 0.12)",
-    borderColor: "rgba(108, 92, 231, 0.3)",
+    backgroundColor: "#171225",
+    borderColor: "#5B3EA6",
     borderRadius: 10,
     borderWidth: 1,
     flex: 1,
@@ -496,8 +496,8 @@ const styles = StyleSheet.create({
   },
   botaoExcluir: {
     alignItems: "center",
-    backgroundColor: "rgba(225, 112, 85, 0.08)",
-    borderColor: "rgba(225, 112, 85, 0.2)",
+    backgroundColor: "#2A111A",
+    borderColor: "#7F1D3A",
     borderRadius: 10,
     borderWidth: 1,
     flex: 1,

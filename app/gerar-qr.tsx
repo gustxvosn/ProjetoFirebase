@@ -1,280 +1,503 @@
-import { useState } from 'react';
-import { View, Text, TextInput, StyleSheet, Pressable, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import * as Print from 'expo-print';
-import { COLORS } from '@/constants/theme';
+import { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  SectionList,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { onAuthStateChanged, User } from "firebase/auth";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  where,
+} from "firebase/firestore";
+import { router } from "expo-router";
+import * as Print from "expo-print";
+import { COLORS } from "@/constants/theme";
+import { auth, db } from "../services/firebase";
+
+type QrHistorico = {
+  id: string;
+  nome: string;
+  codigo: string;
+  status: string;
+  ultimoEvento: string;
+};
+
+const STATUS_ORDEM = ["Sujo", "Lavando", "Limpo"];
+
+function statusVisual(status: string) {
+  if (status === "Limpo") {
+    return { label: "Limpos", color: COLORS.success, icon: "checkmark-circle" as const };
+  }
+
+  if (status === "Lavando") {
+    return { label: "Em processo", color: COLORS.accent, icon: "sync" as const };
+  }
+
+  return { label: "Pendentes", color: COLORS.danger, icon: "alert-circle" as const };
+}
+
+function criarCodigoQr() {
+  const alfabeto = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let codigo = "SW-";
+
+  for (let index = 0; index < 8; index += 1) {
+    codigo += alfabeto[Math.floor(Math.random() * alfabeto.length)];
+  }
+
+  return codigo;
+}
+
+function montarHtmlEtiqueta(nome: string, codigo: string) {
+  const qrData = encodeURIComponent(`SMARTWASH:${codigo}`);
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${qrData}`;
+
+  return `
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <style>
+          body {
+            background: #08070D;
+            color: #F8FAFC;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 24px;
+            text-align: center;
+          }
+          .card {
+            background: #12101A;
+            border: 2px solid #8B5CF6;
+            border-radius: 24px;
+            padding: 34px;
+            width: 360px;
+          }
+          .brand {
+            color: #C4B5FD;
+            font-size: 14px;
+            font-weight: 800;
+            letter-spacing: 2px;
+            margin-bottom: 18px;
+            text-transform: uppercase;
+          }
+          img {
+            background: #FFFFFF;
+            border-radius: 18px;
+            height: 240px;
+            padding: 12px;
+            width: 240px;
+          }
+          h1 {
+            font-size: 24px;
+            margin: 22px 0 8px;
+          }
+          p {
+            color: #C4B5FD;
+            font-size: 17px;
+            font-weight: 800;
+            margin: 0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="brand">Smart Wash</div>
+          <img src="${qrUrl}" alt="QR Code" />
+          <h1>${nome}</h1>
+          <p>${codigo}</p>
+        </div>
+      </body>
+    </html>
+  `;
+}
 
 export default function GerarQrScreen() {
-  const [nomeEquipamento, setNomeEquipamento] = useState('');
-  const [identificador, setIdentificador] = useState('');
-  const [isPrinting, setIsPrinting] = useState(false);
-  
+  const [usuario, setUsuario] = useState<User | null>(null);
+  const [gestorId, setGestorId] = useState("");
+  const [gestorEmail, setGestorEmail] = useState("");
+  const [nomeEquipamento, setNomeEquipamento] = useState("");
+  const [historico, setHistorico] = useState<QrHistorico[]>([]);
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [excluindoId, setExcluindoId] = useState<string | null>(null);
   const [nomeFocused, setNomeFocused] = useState(false);
-  const [identificadorFocused, setIdentificadorFocused] = useState(false);
 
-  const gerarEImprimir = async () => {
-    if (!nomeEquipamento.trim() || !identificador.trim()) {
-      Alert.alert("Atenção", "Preencha todos os campos.");
+  const codigoPreview = useMemo(() => criarCodigoQr(), []);
+  const historicoPorStatus = useMemo(
+    () =>
+      STATUS_ORDEM.map((status) => ({
+        title: status,
+        data: historico.filter((item) => item.status === status),
+      })).filter((section) => section.data.length > 0),
+    [historico]
+  );
+
+  useEffect(() => {
+    let unsubscribeQrcodes: (() => void) | undefined;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        router.replace("/login");
+        return;
+      }
+
+      setUsuario(user);
+      const perfilSnap = await getDoc(doc(db, "usuarios", user.uid));
+      const perfil = perfilSnap.data();
+
+      if (perfil?.perfil !== "gestor") {
+        Alert.alert("Acesso restrito", "Apenas gestores podem gerar QR codes.");
+        router.replace("/home");
+        return;
+      }
+
+      const equipeId = perfil?.gestorId || user.uid;
+      const equipeEmail = perfil?.gestorEmail || user.email || "";
+      setGestorId(equipeId);
+      setGestorEmail(equipeEmail);
+
+      unsubscribeQrcodes?.();
+      unsubscribeQrcodes = onSnapshot(
+        query(collection(db, "qrcodes"), where("gestorId", "==", equipeId)),
+        (snapshot) => {
+          const lista = snapshot.docs
+            .map((item) => {
+              const dados = item.data();
+              return {
+                id: item.id,
+                nome: String(dados.nome || ""),
+                codigo: String(dados.codigo || ""),
+                status: String(dados.status || "Sujo"),
+                ultimoEvento: String(dados.ultimoEvento || "QR code criado"),
+              };
+            })
+            .sort((a, b) => a.nome.localeCompare(b.nome));
+
+          setHistorico(lista);
+          setCarregando(false);
+        },
+        (error) => {
+          Alert.alert("Erro ao carregar histórico", error.message);
+          setCarregando(false);
+        }
+      );
+    });
+
+    return () => {
+      unsubscribeQrcodes?.();
+      unsubscribeAuth();
+    };
+  }, []);
+
+  async function gerarSalvarImprimir() {
+    if (!usuario || !gestorId) {
+      Alert.alert("Atenção", "Entre com um gestor do Firebase para gerar QR codes.");
+      return;
+    }
+
+    if (!nomeEquipamento.trim()) {
+      Alert.alert("Atenção", "Informe o nome do equipamento.");
       return;
     }
 
     try {
-      setIsPrinting(true);
-      
-      const qrData = encodeURIComponent(`ID:${identificador}|NOME:${nomeEquipamento}`);
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${qrData}`;
+      setSalvando(true);
+      const codigo = criarCodigoQr();
 
-      const html = `
-        <html>
-          <head>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
-            <style>
-              body {
-                font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                height: 100vh;
-                margin: 0;
-                padding: 20px;
-                text-align: center;
-              }
-              .card {
-                border: 2px dashed #000;
-                padding: 40px;
-                border-radius: 20px;
-                max-width: 400px;
-              }
-              h1 {
-                font-size: 24px;
-                color: #333;
-                margin-bottom: 10px;
-              }
-              p {
-                font-size: 18px;
-                color: #666;
-                margin-bottom: 30px;
-              }
-              img {
-                width: 250px;
-                height: 250px;
-                margin-bottom: 20px;
-              }
-              .footer {
-                margin-top: 40px;
-                font-size: 14px;
-                color: #999;
-              }
-            </style>
-          </head>
-          <body>
-            <div class="card">
-              <img src="${qrUrl}" alt="QR Code" />
-              <h1>${nomeEquipamento}</h1>
-              <p>ID: ${identificador}</p>
-            </div>
-            <div class="footer">
-              HygienicPro - Controle Sanitário
-            </div>
-          </body>
-        </html>
-      `;
+      await addDoc(collection(db, "qrcodes"), {
+        nome: nomeEquipamento.trim(),
+        codigo,
+        status: "Sujo",
+        tempo: "Pendente",
+        ultimoEvento: "QR code criado",
+        gestorId,
+        gestorEmail,
+        criadoPor: usuario.uid,
+        criadoPorEmail: usuario.email,
+        criadoEm: serverTimestamp(),
+        atualizadoEm: serverTimestamp(),
+      });
 
       await Print.printAsync({
-        html,
+        html: montarHtmlEtiqueta(nomeEquipamento.trim(), codigo),
       });
-      
-      setNomeEquipamento('');
-      setIdentificador('');
 
+      setNomeEquipamento("");
+      Alert.alert("Sucesso", "QR code salvo no Firebase e enviado para impressão.");
     } catch (error: any) {
-      Alert.alert("Erro", "Não foi possível imprimir o QR Code.");
-      console.error(error);
+      Alert.alert("Erro", error.message || "Não foi possível gerar o QR code.");
     } finally {
-      setIsPrinting(false);
+      setSalvando(false);
     }
-  };
+  }
+
+  function confirmarExclusao(item: QrHistorico) {
+    Alert.alert("Excluir QR code", `Deseja excluir "${item.nome}"?`, [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Excluir", style: "destructive", onPress: () => excluirQrCode(item.id) },
+    ]);
+  }
+
+  async function excluirQrCode(id: string) {
+    try {
+      setExcluindoId(id);
+      await deleteDoc(doc(db, "qrcodes", id));
+    } catch (error: any) {
+      Alert.alert("Erro", error.message || "Não foi possível excluir o QR code.");
+    } finally {
+      setExcluindoId(null);
+    }
+  }
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={COLORS.text} />
         </Pressable>
-        <Text style={styles.headerTitle}>Gerar QR Code</Text>
+        <Text style={styles.headerTitle}>QR Codes</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.card}>
-          <View style={styles.iconWrap}>
-            <Ionicons name="qr-code-outline" size={48} color={COLORS.accent} />
-          </View>
-          <Text style={styles.title}>Novo Equipamento</Text>
-          <Text style={styles.subtitle}>
-            Preencha os dados abaixo para gerar e imprimir a etiqueta QR Code.
-          </Text>
+      <SectionList
+        ListHeaderComponent={
+          <View>
+            <View style={styles.card}>
+              <View style={styles.iconWrap}>
+                <Ionicons name="qr-code-outline" size={48} color={COLORS.accent} />
+              </View>
+              <Text style={styles.title}>Novo QR Code</Text>
+              <Text style={styles.subtitle}>
+                O QR code será salvo no Firebase e ficará disponível para a equipe deste gestor.
+              </Text>
 
-          <View style={styles.inputWrap}>
-            <Text style={styles.label}>Nome do Equipamento</Text>
-            <TextInput
-              style={[styles.input, nomeFocused && styles.inputFocused]}
-              placeholder="Ex: Autoclave L-01"
-              placeholderTextColor={COLORS.textMuted}
-              value={nomeEquipamento}
-              onChangeText={setNomeEquipamento}
-              onFocus={() => setNomeFocused(true)}
-              onBlur={() => setNomeFocused(false)}
-            />
-          </View>
+              <View style={styles.inputWrap}>
+                <Text style={styles.label}>Nome do equipamento</Text>
+                <TextInput
+                  onBlur={() => setNomeFocused(false)}
+                  onChangeText={setNomeEquipamento}
+                  onFocus={() => setNomeFocused(true)}
+                  placeholder="Ex: Lavadora Industrial 01"
+                  placeholderTextColor={COLORS.textMuted}
+                  style={[styles.input, nomeFocused && styles.inputFocused]}
+                  value={nomeEquipamento}
+                />
+              </View>
 
-          <View style={styles.inputWrap}>
-            <Text style={styles.label}>Identificador (ID/Série)</Text>
-            <TextInput
-              style={[styles.input, identificadorFocused && styles.inputFocused]}
-              placeholder="Ex: QR-HYG-001"
-              placeholderTextColor={COLORS.textMuted}
-              value={identificador}
-              onChangeText={setIdentificador}
-              autoCapitalize="characters"
-              onFocus={() => setIdentificadorFocused(true)}
-              onBlur={() => setIdentificadorFocused(false)}
-            />
-          </View>
+              <View style={styles.previewBox}>
+                <Text style={styles.previewLabel}>Exemplo de código gerado</Text>
+                <Text style={styles.previewCode}>{codigoPreview}</Text>
+              </View>
 
-          <Pressable 
-            style={[styles.button, isPrinting && styles.buttonDisabled]} 
-            onPress={gerarEImprimir}
-            disabled={isPrinting}
-          >
-            {isPrinting ? (
-              <ActivityIndicator color={COLORS.white} />
-            ) : (
-              <>
-                <Ionicons name="print-outline" size={20} color={COLORS.white} />
-                <Text style={styles.buttonText}>Gerar e Imprimir</Text>
-              </>
-            )}
-          </Pressable>
-        </View>
-      </ScrollView>
+              <Pressable
+                disabled={salvando}
+                onPress={gerarSalvarImprimir}
+                style={[styles.button, salvando && styles.buttonDisabled]}
+              >
+                {salvando ? (
+                  <ActivityIndicator color={COLORS.white} />
+                ) : (
+                  <>
+                    <Ionicons name="save-outline" size={20} color={COLORS.white} />
+                    <Text style={styles.buttonText}>Salvar e imprimir</Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+
+            <Text style={styles.historyTitle}>Histórico de QR Codes</Text>
+            {carregando ? <ActivityIndicator color={COLORS.accent} style={styles.loading} /> : null}
+          </View>
+        }
+        contentContainerStyle={styles.content}
+        sections={historicoPorStatus}
+        keyExtractor={(item) => item.id}
+        ListEmptyComponent={
+          !carregando ? <Text style={styles.emptyText}>Nenhum QR code gerado ainda.</Text> : null
+        }
+        renderSectionHeader={({ section }) => {
+          const visual = statusVisual(section.title);
+
+          return (
+            <View style={styles.statusHeader}>
+              <Ionicons color={visual.color} name={visual.icon} size={18} />
+              <Text style={[styles.statusHeaderText, { color: visual.color }]}>
+                {visual.label} ({section.data.length})
+              </Text>
+            </View>
+          );
+        }}
+        renderItem={({ item }) => (
+          <View style={styles.historyCard}>
+            <View style={styles.historyIcon}>
+              <Ionicons name="qr-code" size={22} color={COLORS.accentLight} />
+            </View>
+            <View style={styles.historyInfo}>
+              <Text style={styles.historyName}>{item.nome}</Text>
+              <Text style={styles.historyMeta}>{item.codigo} · {item.status}</Text>
+              <Text style={styles.historyEvent}>{item.ultimoEvento}</Text>
+            </View>
+            <Pressable
+              disabled={excluindoId === item.id}
+              onPress={() => confirmarExclusao(item)}
+              style={({ pressed }) => [styles.deleteButton, pressed && styles.deleteButtonPressed]}
+            >
+              {excluindoId === item.id ? (
+                <ActivityIndicator color={COLORS.danger} size="small" />
+              ) : (
+                <Ionicons color={COLORS.danger} name="trash-outline" size={19} />
+              )}
+            </Pressable>
+          </View>
+        )}
+      />
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
     backgroundColor: COLORS.background,
+    flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'ios' ? 50 : 30,
-    paddingHorizontal: 20,
-    paddingBottom: 20,
+    alignItems: "center",
     backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
     borderBottomColor: COLORS.border,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === "ios" ? 50 : 30,
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    alignItems: "center",
     backgroundColor: COLORS.surfaceAlt,
-    borderWidth: 1,
     borderColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
     color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "bold",
   },
   content: {
     padding: 20,
+    paddingBottom: 40,
   },
   card: {
+    alignItems: "center",
     backgroundColor: COLORS.surface,
-    borderRadius: 24,
-    padding: 24,
-    borderWidth: 1,
     borderColor: COLORS.border,
-    alignItems: 'center',
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 4,
+    borderRadius: 24,
+    borderWidth: 1,
+    padding: 24,
   },
   iconWrap: {
-    width: 80,
-    height: 80,
+    alignItems: "center",
+    backgroundColor: "#171225",
     borderRadius: 40,
-    backgroundColor: 'rgba(108, 92, 231, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    height: 80,
+    justifyContent: "center",
     marginBottom: 16,
+    width: 80,
   },
   title: {
-    fontSize: 24,
-    fontWeight: '900',
     color: COLORS.text,
+    fontSize: 24,
+    fontWeight: "900",
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 14,
     color: COLORS.textMuted,
-    textAlign: 'center',
-    marginBottom: 32,
+    fontSize: 14,
     lineHeight: 20,
+    marginBottom: 24,
+    textAlign: "center",
   },
   inputWrap: {
-    width: '100%',
-    marginBottom: 20,
+    marginBottom: 16,
+    width: "100%",
   },
   label: {
-    fontSize: 13,
-    fontWeight: '700',
     color: COLORS.text,
+    fontSize: 13,
+    fontWeight: "700",
     marginBottom: 8,
   },
   input: {
     backgroundColor: COLORS.surfaceAlt,
-    borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 14,
-    paddingHorizontal: 16,
-    height: 54,
-    fontSize: 15,
+    borderWidth: 1,
     color: COLORS.text,
+    fontSize: 15,
+    height: 54,
+    paddingHorizontal: 16,
   },
   inputFocused: {
-    borderColor: COLORS.accent,
     backgroundColor: `${COLORS.accent}05`,
+    borderColor: COLORS.accent,
+    borderWidth: 2,
+  },
+  previewBox: {
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceAlt,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 16,
+    padding: 14,
+    width: "100%",
+  },
+  previewLabel: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  previewCode: {
+    color: COLORS.accentLight,
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: 2,
+    marginTop: 4,
   },
   button: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
     backgroundColor: COLORS.accent,
-    width: '100%',
-    height: 54,
     borderRadius: 14,
+    flexDirection: "row",
     gap: 8,
-    marginTop: 10,
-    shadowColor: COLORS.accent,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    height: 54,
+    justifyContent: "center",
+    width: "100%",
   },
   buttonDisabled: {
     opacity: 0.7,
@@ -282,6 +505,87 @@ const styles = StyleSheet.create({
   buttonText: {
     color: COLORS.white,
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
+  },
+  historyTitle: {
+    color: COLORS.text,
+    fontSize: 18,
+    fontWeight: "900",
+    marginBottom: 12,
+    marginTop: 24,
+  },
+  loading: {
+    marginVertical: 16,
+  },
+  emptyText: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+    marginVertical: 18,
+    textAlign: "center",
+  },
+  statusHeader: {
+    alignItems: "center",
+    backgroundColor: COLORS.background,
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 10,
+    marginTop: 14,
+    paddingVertical: 4,
+  },
+  statusHeaderText: {
+    fontSize: 15,
+    fontWeight: "900",
+  },
+  historyCard: {
+    alignItems: "center",
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 12,
+    padding: 14,
+  },
+  historyIcon: {
+    alignItems: "center",
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: 14,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  historyInfo: {
+    flex: 1,
+  },
+  historyName: {
+    color: COLORS.text,
+    fontSize: 16,
+    fontWeight: "900",
+  },
+  historyMeta: {
+    color: COLORS.accentLight,
+    fontSize: 12,
+    fontWeight: "800",
+    marginTop: 3,
+  },
+  historyEvent: {
+    color: COLORS.textMuted,
+    fontSize: 12,
+    marginTop: 3,
+  },
+  deleteButton: {
+    alignItems: "center",
+    backgroundColor: "#2A111A",
+    borderColor: "#7F1D3A",
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: "center",
+    width: 42,
+  },
+  deleteButtonPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
   },
 });

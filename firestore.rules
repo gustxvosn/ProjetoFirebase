@@ -2,6 +2,29 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function isGestor() {
+      return signedIn() && userDoc().perfil == 'gestor';
+    }
+
+    function sameTeam(gestorId) {
+      return signedIn()
+        && (request.auth.uid == gestorId || userDoc().gestorId == gestorId);
+    }
+
+    function isWillViewerForEnrico(gestorEmail) {
+      return signedIn()
+        && userDoc().nome == 'Will Will'
+        && gestorEmail == 'enricomachado1@hotmail.com';
+    }
+
     match /usuarios/{userId} {
       allow read, create, update, delete: if request.auth != null
         && request.auth.uid == userId;
@@ -13,6 +36,69 @@ service cloud.firestore {
 
       allow update, delete: if request.auth != null
         && resource.data.usuarioId == request.auth.uid;
+    }
+
+    match /chaves_cadastro/{chaveId} {
+      allow get: if true;
+      allow list: if false;
+
+      allow create: if signedIn()
+        && chaveId.matches('[A-Z2-9]{8}')
+        && request.resource.data.keys().hasOnly([
+          'chave',
+          'perfil',
+          'gestorId',
+          'gestorEmail',
+          'criadoPor',
+          'criadoPorEmail',
+          'usada',
+          'criadoEm'
+        ])
+        && request.resource.data.chave == chaveId
+        && request.resource.data.criadoPor == request.auth.uid
+        && request.resource.data.perfil in ['cliente', 'funcionario', 'gestor']
+        && request.resource.data.usada == false;
+
+      allow update: if request.auth != null
+        && resource.data.usada == false
+        && request.resource.data.chave == resource.data.chave
+        && request.resource.data.perfil == resource.data.perfil
+        && request.resource.data.usada == true
+        && request.resource.data.usadaPor == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['usada', 'usadaEm', 'usadaPor']);
+    }
+
+    match /qrcodes/{qrId} {
+      allow read: if sameTeam(resource.data.gestorId)
+        || isWillViewerForEnrico(resource.data.gestorEmail);
+
+      allow create: if isGestor()
+        && request.resource.data.keys().hasOnly([
+          'nome',
+          'codigo',
+          'status',
+          'tempo',
+          'ultimoEvento',
+          'gestorId',
+          'gestorEmail',
+          'criadoPor',
+          'criadoPorEmail',
+          'criadoEm',
+          'atualizadoEm'
+        ])
+        && request.resource.data.gestorId == request.auth.uid
+        && request.resource.data.criadoPor == request.auth.uid
+        && request.resource.data.status in ['Limpo', 'Sujo', 'Lavando'];
+
+      allow update: if sameTeam(resource.data.gestorId)
+        && request.resource.data.gestorId == resource.data.gestorId
+        && request.resource.data.codigo == resource.data.codigo
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'tempo', 'ultimoEvento', 'atualizadoEm'])
+        && request.resource.data.status in ['Limpo', 'Sujo', 'Lavando'];
+
+      allow delete: if isGestor() && resource.data.gestorId == request.auth.uid;
     }
   }
 }

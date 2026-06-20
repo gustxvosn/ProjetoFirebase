@@ -31,6 +31,8 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
+        <Stack.Screen name="recuperar-senha" />
+        <Stack.Screen name="nova-senha" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="cadastro" />
         <Stack.Screen name="home" />
